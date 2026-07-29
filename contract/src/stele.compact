@@ -1,7 +1,8 @@
-// STELE — hesap verebilirlik sicili
-// Bir kurum; sorusunu, kime sorduğunu, ne zaman kapatacağını ve sonuca ne
-// yapacağını geri alamayacak biçimde kaydeder. Cevap verenler görünmez kalır;
-// sayım ve verilen söz herkesçe doğrulanabilir.
+// STELE - a public record of accountability
+//
+// An institution records its question, who may answer it, when it closes and
+// what it promises to do about the outcome, in a way it cannot take back.
+// Respondents stay invisible; the count and the promise are publicly verifiable.
 //
 // SPDX-License-Identifier: Apache-2.0
 
@@ -10,15 +11,16 @@ pragma language_version 0.23;
 import CompactStandardLibrary;
 
 // ---------------------------------------------------------------------------
-// Faz makinesi
+// Phases
 //
-// REGISTRATION: uygunluk ağacı büyür, oy kabul edilmez.
-// VOTING:       ağaç DONAR, yalnız katılım kabul edilir.
-// CLOSED:       sayım kesinleşir.
+// REGISTRATION: the eligibility tree grows, no answers are accepted.
+// VOTING:       the root is FROZEN, only participation is accepted.
+// CLOSED:       the count is final.
 //
-// Kökün donması üç şeyi birden çözer: (a) kanıt üretilirken kökün değişip
-// işlemi geçersiz kılması, (b) tur ortasında hayalet katılımcı eklenmesi,
-// (c) aynı soruyu farklı kümelerle açıp farktan tek kişiyi izole etme.
+// Freezing the root closes three holes at once: proofs invalidated by a root
+// that shifts mid-flight, ghost entries added after the operator has seen
+// where the round is heading, and differencing attacks that isolate a single
+// person by running the same question against two slightly different sets.
 // ---------------------------------------------------------------------------
 export enum Phase {
   REGISTRATION,
@@ -27,95 +29,98 @@ export enum Phase {
 }
 
 // ---------------------------------------------------------------------------
-// Turun değişmez taahhütleri — yalnız constructor'da yazılır (sealed).
-// Bir tur açıldıktan sonra sorusu, kime sorulduğu ve verilen söz değiştirilemez.
+// What the round commits to, written once at construction (sealed).
+// Once a round is open its question, its audience and its promise are fixed.
 // ---------------------------------------------------------------------------
 
-// Sicildeki sıra numarası. Numara boşluğu = duyurulmamış tur.
+// Position in the registry. A gap in the sequence is an unannounced round.
 export sealed ledger roundNumber: Uint<64>;
 
-// Soru metni + seçenek etiketlerinin kanonik hash'i.
-// Zincirde soru durmazsa "sayaç[2]=47" hiçbir şey ifade etmez ve kurum
-// sonradan soruyu değiştirip aynı sayımı başka bir soruya aitmiş gibi sunabilir.
+// Canonical hash of the question text and its option labels.
+// Without the question on chain, "tally[2] = 47" says nothing, and the
+// institution could relabel the question afterwards and present the same
+// count as belonging to something far more flattering.
 export sealed ledger questionHash: Bytes<32>;
 
-// Geçerli cevap aralığı: 0 .. optionCount-1
+// Valid answers are 0 .. optionCount-1
 export sealed ledger optionCount: Uint<8>;
 
-// TAAHHÜT KATMANI — ürünün kalbi.
-// Kurum yalnız soruyu değil, sonuca dair sözünü de kazır:
-// "şu eşiğin altında çıkarsa şunu yapacağım".
+// THE PROMISE - the heart of the product.
+// The institution engraves not only its question but what it will do about
+// the answer: "if it comes in below this threshold, here is my commitment".
 export sealed ledger promiseHash: Bytes<32>;
 export sealed ledger promiseThreshold: Uint<8>;
 
-// k-anonimlik eşiği: bu sayının altında katılım olan tur geçerli sayılmaz.
-// Küçük gruplarda sayaç hareketi kişiye kadar izlenebildiği için bu bir
-// ürün ayarı değil, devre kuralıdır.
+// k-anonymity floor. A round that draws fewer participants than this cannot
+// be closed. In a small group a moving tally can be traced back to a person,
+// so this is a circuit rule rather than a product setting.
 export sealed ledger minParticipants: Uint<16>;
 
-// Operatörün taahhüt kimliği. Faz geçişlerini yalnız bu kimlik yapabilir.
+// The operator's committed identity. Only this identity can move the phase.
 export sealed ledger operatorId: Bytes<32>;
 
 // ---------------------------------------------------------------------------
-// Değişen durum
+// Mutable state
 // ---------------------------------------------------------------------------
 
 export ledger phase: Phase;
 
-// Uygunluk ağacı. HistoricMerkleTree çünkü checkRoot GEÇMİŞ kökleri de kabul
-// eder: kayıt sırasında erken kaydolan birinin ürettiği yol, ağaç sonradan
-// büyüse bile geçerli kalır.
+// The eligibility tree. HistoricMerkleTree because checkRoot also accepts
+// PAST roots: a path produced by an early registrant stays valid even after
+// the tree has grown.
 export ledger eligibility: HistoricMerkleTree<16, Bytes<32>>;
 
-// Kaç kişi kaydoldu (public — hayalet katılımcı iddiasının sosyal denetimi).
+// How many registered. Public, so a padded roster is socially visible.
 export ledger eligibleCount: Counter;
 
-// Kullanılmış tekillik damgaları. Nullifier zaten public olması gereken bir
-// değer olduğu için burada Set kullanmak güvenlidir.
-// (Üyelik kanıtında Set KULLANILAMAZ — hangi elemanın test edildiğini sızdırır.)
+// Spent uniqueness tags. A Set is safe here because a nullifier is a value
+// that is meant to be public. (A Set must NOT be used for the membership
+// proof - it reveals which element was tested.)
 export ledger nullifiers: Set<Bytes<32>>;
 
-// Seçenek başına sayaç.
+// Per-option tally.
 export ledger tally: Map<Uint<8>, Counter>;
 
-// Toplam katılım.
+// Total participation.
 export ledger participantCount: Counter;
 
 // ---------------------------------------------------------------------------
-// Witness — yalnız katılımcının kendi cihazında bulunur, zincire hiç düşmez.
+// Witnesses - held only on the participant's own device, never on chain.
 // ---------------------------------------------------------------------------
 
-// Uygunluk sırrı. Katılımcının cihazında üretilir; kuruma yalnız commitment
-// (H(sır)) verilir. Kurum sırrı görürse nullifier'ları önceden hesaplayıp
-// damga listesini isim listesine çevirebilirdi.
+// The eligibility secret. Generated on the participant's device; the
+// institution only ever receives the commitment H(secret). Whoever knows a
+// secret can precompute its nullifiers, so a centrally issued secret would
+// turn the public tag list into a roster of names.
 witness localSecret(): Bytes<32>;
 
-// Commitment'ın ağaçtaki üyelik yolu.
+// The commitment's membership path in the tree.
 witness eligibilityPath(cm: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
 
 // ---------------------------------------------------------------------------
-// Türetmeler — domain ayrımı zorunlu
+// Derivations - domain separation is mandatory
 // ---------------------------------------------------------------------------
 
-// commitment = H("stele:cm:", sır)
+// commitment = H("stele:cm:", secret)
 export circuit commitmentOf(secret: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:cm:"), secret]);
 }
 
-// nullifier = H("stele:nul:", turNo, sır)
-// Tur numarası domain ayrımına girer: aynı sır farklı turlarda farklı damga
-// üretir, damgalar turlar arasında birbirine bağlanamaz.
+// nullifier = H("stele:nul:", roundNumber, secret)
+// The round number enters the domain separator, so the same secret yields
+// unrelated tags in different rounds and participation cannot be linked
+// across the registry.
 export circuit nullifierOf(secret: Bytes<32>, round: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<3, Bytes<32>>>([pad(32, "stele:nul:"), round, secret]);
 }
 
-// operatör kimliği = H("stele:op:", sır)
+// operator identity = H("stele:op:", secret)
 export circuit operatorIdOf(secret: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:op:"), secret]);
 }
 
 // ---------------------------------------------------------------------------
-// Kurulum
+// Construction
 // ---------------------------------------------------------------------------
 constructor(
   round: Uint<64>,
@@ -137,29 +142,29 @@ constructor(
 }
 
 // ---------------------------------------------------------------------------
-// Devreler
+// Circuits
 // ---------------------------------------------------------------------------
 
-// Kayıt. Katılımcı kendi cihazında ürettiği commitment'ı ağaca ekletir.
-// Sır hiçbir zaman buraya gelmez.
+// Register. The participant submits a commitment produced on their own
+// device. The secret itself never arrives here.
 export circuit register(cm: Bytes<32>): [] {
   assert(phase == Phase.REGISTRATION, "Round is not accepting registrations");
   eligibility.insert(disclose(cm));
   eligibleCount.increment(1);
 }
 
-// Kaydı kapat, oylamayı aç. Kök bu noktada donar.
+// Close registration and open voting. The root freezes at this point.
 export circuit openVoting(): [] {
   assert(phase == Phase.REGISTRATION, "Round is not in registration phase");
   assert(operatorId == operatorIdOf(localSecret()), "Only the operator can open voting");
   phase = Phase.VOTING;
 }
 
-// Katılım. Devrenin kanıtladığı:
-//   uygunluk ağacındaki bir commitment'ın sırrını biliyorum
-//   VE bu turda damgam daha önce kullanılmadı
-//   VE cevabım geçerli aralıkta.
-// Kimlik hiçbir aşamada ledger'a düşmez.
+// Participate. What the circuit proves:
+//   I know the secret behind a commitment in the eligibility tree
+//   AND my tag for this round has not been spent
+//   AND my answer is within range.
+// No identity reaches the ledger at any point.
 export circuit participate(choice: Uint<8>): [] {
   assert(phase == Phase.VOTING, "Round is not open for voting");
   assert(choice < optionCount, "Choice out of range");
@@ -168,9 +173,9 @@ export circuit participate(choice: Uint<8>): [] {
   const cm = commitmentOf(secret);
   const path = eligibilityPath(cm);
 
-  // İKİ koşul birden gerekli. checkRoot tek başına yalnız "bu kök geçerli mi"
-  // sorusunu cevaplar; yaprağın bizim commitment'ımız olduğunu kanıtlamaz.
-  // Eksik bırakılırsa saldırgan geçerli ama alakasız bir yaprakla geçebilir.
+  // Both conditions are required. checkRoot alone only answers "is this a
+  // root this tree has had", not "is the leaf mine" - on its own an attacker
+  // could pass with a valid but unrelated leaf.
   assert(
     eligibility.checkRoot(disclose(merkleTreePathRoot<16, Bytes<32>>(path))) && cm == path.leaf,
     "Not an eligible participant"
@@ -187,8 +192,8 @@ export circuit participate(choice: Uint<8>): [] {
   participantCount.increment(1);
 }
 
-// Turu kapat. k-eşiğinin altındaki tur kapatılamaz: az katılımlı bir turda
-// sayım kişiye kadar izlenebilir hale gelir.
+// Close the round. A round below the k-anonymity floor cannot be closed:
+// with too few participants the tally can be traced back to a person.
 export circuit closeRound(): [] {
   assert(phase == Phase.VOTING, "Round is not open");
   assert(operatorId == operatorIdOf(localSecret()), "Only the operator can close the round");

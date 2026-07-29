@@ -1,110 +1,110 @@
 # STELE
 
-**Bir kurum; sorusunu, kime sorduğunu, ne zaman kapatacağını ve sonuca ne yapacağını geri alamayacak biçimde kaydeder. Cevap verenler görünmez kalır; sayım ve verilen söz herkesçe doğrulanabilir.**
+**An institution records its question, who may answer it, when it closes, and what it promises to do about the outcome — in a way it cannot take back. Respondents stay invisible; the count and the promise are publicly verifiable.**
 
-Stele bir anket aracı değil, bir **hesap verebilirlik sicilidir**. Anket toplama, sicili üreten mekanizmadır; ürün, sicili itiraz edilemez kılan şeydir.
+Stele is not a survey tool. It is a **public record of accountability**. Collecting answers is the mechanism that produces the record; the product is what makes the record impossible to dispute.
 
-Adını Hammurabi'nin stelinden alır: kanunlar taşa kazınıp meydana dikilir, halk okur, kimse silemez.
+It takes its name from the stele of Hammurabi: laws carved into stone and raised in the public square, where everyone can read them and no one can erase them.
 
-Midnight Network üzerinde Compact ile yazılmıştır.
-
----
-
-## Çözdüğü problem
-
-Geri bildirim sistemlerinde üç ayrı güven kırığı vardır:
-
-1. **"Beni tanırlar mı?"** — misilleme korkusu. Hasta "zor hasta" damgası yememek için şikâyet etmez; öğrenci not kaygısıyla cevabını yumuşatır.
-2. **"Söylesem ne değişecek, gömerler."** — kurum kötü sonucu duyurmazsa kimse anlamaz.
-3. **"Açıklanan rakamlar gerçek mi?"**
-
-Mevcut anket araçları yalnız birinciyi çözmeye çalışır ve diğer ikisini yapısal olarak çözemez: **veriyi toplayan taraf ile sonucu raporlayan taraf aynıdır.**
-
-Stele üçünü de mimariye taşır. Kimlik zincire hiç düşmez; sayım ve kurumun sözü ise zincire kazınır, üçüncü bir taraf bunları bağımsız olarak doğrulayabilir.
+Built on [Midnight Network](https://midnight.network/) in Compact.
 
 ---
 
-## Ürünün atomu: TUR
+## The problem
 
-Bir tur, beş taahhüdün aynı anda ve geri alınamaz biçimde kaydedilmesidir:
+Feedback systems have three separate breaks of trust:
 
-| Taahhüt | Ledger alanı |
+1. **"Will they know it was me?"** — fear of retaliation. A patient stays quiet to avoid being labelled difficult; a student softens an answer to protect a grade.
+2. **"Even if I speak, nothing changes — they will bury it."**
+3. **"Are the published numbers real?"**
+
+Existing survey tools only attempt the first, and structurally cannot address the other two: **the party collecting the data is the same party reporting the result.**
+
+Stele moves all three into the architecture. Identity never reaches the chain; the count and the institution's promise are engraved into it, where a third party can verify them independently.
+
+---
+
+## The unit: a ROUND
+
+A round is five commitments recorded at once, none of which can be withdrawn:
+
+| Commitment | Ledger field |
 |---|---|
-| **Soru** (tek, kapalı uçlu) | `questionHash`, `optionCount` |
-| **Kim** (uygunluk kümesi) | `eligibility` kökü, `eligibleCount` |
-| **Sıra** (sicildeki yeri) | `roundNumber` |
-| **Söz** (sonuca bağlı taahhüt) | `promiseHash`, `promiseThreshold` |
-| **Alt sınır** (k-anonimlik) | `minParticipants` |
+| **The question** (single, closed-ended) | `questionHash`, `optionCount` |
+| **The audience** (who may answer) | `eligibility` root, `eligibleCount` |
+| **Its place** in the registry | `roundNumber` |
+| **The promise** tied to the outcome | `promiseHash`, `promiseThreshold` |
+| **The anonymity floor** | `minParticipants` |
 
-Dördüncüsü ürünün kalbidir. Sayımı kazımak *"söylesem ne değişecek"* sorusunu cevaplamaz; **sözü kazımak** cevaplar. Kurum turu açarken "şu eşiğin altında çıkarsa şunu yapacağım" der; bir sonraki tur açıldığında sözün tutulup tutulmadığı aynı sicilde yan yana durur.
+The fourth is the heart of the product. Engraving the count does not answer *"what will change if I speak?"* — **engraving the promise does.** When opening a round the institution states "if it comes in below this threshold, here is what I will do". When the next round opens, whether that promise was kept sits in the same registry, side by side with it.
 
 ---
 
-## Yaşam döngüsü
+## Lifecycle
 
 ```
-KAYIT  ──►  OYLAMA  ──►  KAPALI
+REGISTRATION  ──►  VOTING  ──►  CLOSED
 ```
 
-- **KAYIT** — katılımcılar commitment gönderir, uygunluk ağacı büyür.
-- **OYLAMA** — kök **donar**, yalnız katılım kabul edilir.
-- **KAPALI** — sayım kesinleşir; k-eşiğinin altındaki tur kapatılamaz.
+- **REGISTRATION** — participants submit commitments; the eligibility tree grows.
+- **VOTING** — the root **freezes**; only participation is accepted.
+- **CLOSED** — the count is final. A round below the anonymity floor cannot be closed.
 
-Kökün donması üç sorunu birden çözer: kanıt üretilirken kökün değişip işlemi geçersiz kılmasını, tur ortasında hayalet katılımcı eklenmesini, ve aynı soruyu farklı kümelerle açıp farktan tek kişiyi izole etme (differencing) saldırısını.
-
----
-
-## Gizlilik modeli
-
-### Zincirde ne var (herkes görür)
-
-Tur numarası · soru ve seçenek hash'i · uygunluk kökü · kaç kişi kaydoldu · taahhüt eşiği ve söz hash'i · faz durumu · kullanılmış tekillik damgaları · seçenek başına sayaç · toplam katılım.
-
-### Zincire hiç düşmeyen (yalnız katılımcının cihazında)
-
-Uygunluk sırrı · Merkle üyelik yolu · cevabın kime ait olduğu.
-
-### Devrenin kanıtladığı
-
-> *Uygunluk ağacındaki bir commitment'ın sırrını biliyorum **ve** bu turda damgam daha önce kullanılmadı **ve** cevabım geçerli aralıkta.*
-
-### Gözlemci ne öğrenir, ne öğrenemez
-
-**Öğrenir:** kaç kişi kaydoldu, kaç kişi katıldı, hangi seçenek kaç oy aldı, turun ne zaman açılıp kapandığı, kurumun ne söz verdiği.
-
-**Öğrenemez:** kimin katıldığı, kimin ne cevap verdiği, bir damganın hangi kayda ait olduğu, aynı kişinin farklı turlardaki damgalarının ilişkisi.
-
-### Kriptografik kurallar
-
-- `commitment = persistentHash("stele:cm:", sır)` — **sır yalnız katılımcının cihazında üretilir.** Sırrı bilen taraf tüm damgaları önceden hesaplayabileceği için, sır merkezî olarak üretilirse ledger'daki damga listesi o taraf için isim listesine dönüşür.
-- `nullifier = persistentHash("stele:nul:", turNo, sır)` — tur numarası domain ayrımına girer; aynı kişinin farklı turlardaki damgaları birbirine bağlanamaz.
-- Damga **asla** commitment'tan türetilmez (commitment kurumun elindedir).
-- `transientHash` ledger'a yazılan hiçbir değerde kullanılmaz — protokol yükseltmeleri arasında kalıcı değildir.
-- Üyelik kanıtında **`Set` kullanılmaz**: hangi elemanın test edildiğini açığa çıkarır. Üyelik `HistoricMerkleTree` ve witness path ile kanıtlanır. Damganın "kullanıldı mı" kontrolü için `Set` güvenlidir, çünkü damga zaten public olması istenen bir değerdir.
-- Üyelik doğrulaması iki koşulu birden arar: kökün tanınması **ve** yaprağın bizim commitment'ımız olması. Tek başına kök kontrolü, geçerli ama alakasız bir yaprakla geçilebilirdi.
-- Kanıt **kullanıcının kendi cihazında** üretilir. Barındırılmış proof server yasaktır: witness'ı düz metin görür.
+Freezing the root closes three holes at once: proofs invalidated by a root that shifts while they are being produced, ghost entries added after the operator has seen where the round is heading, and differencing attacks that isolate a single person by running the same question against two slightly different sets.
 
 ---
 
-## Dürüst sınırlar
+## Privacy model
 
-Bunlar gizlenmiyor, çünkü gizlendiği anda ilk ciddi incelemede çöker.
+### What is on chain (visible to everyone)
 
-| Sınır | Gerçek |
+Round number · hash of the question and its options · eligibility root · how many registered · the promise threshold and its hash · phase · spent uniqueness tags · per-option tally · total participation.
+
+### What never reaches the chain (held only on the participant's device)
+
+The eligibility secret · the Merkle membership path · whose answer is whose.
+
+### What the circuit proves
+
+> *I know the secret behind a commitment in the eligibility tree **and** my tag for this round has not been spent **and** my answer is within range.*
+
+### What an observer learns, and what it cannot
+
+**Learns:** how many registered, how many took part, how many votes each option received, when the round opened and closed, and what the institution promised.
+
+**Cannot learn:** who took part, who answered what, which registration a tag belongs to, or whether two tags in different rounds belong to the same person.
+
+### Cryptographic rules
+
+- `commitment = persistentHash("stele:cm:", secret)` — **the secret is generated on the participant's own device.** Whoever knows a secret can precompute its nullifiers, so a centrally issued secret would turn the public tag list into a roster of names.
+- `nullifier = persistentHash("stele:nul:", roundNumber, secret)` — the round number enters the domain separator, so one person's tags in different rounds cannot be linked.
+- A tag is **never** derived from a commitment; commitments are held by the institution.
+- `transientHash` is used for no value written to the ledger — it is not stable across protocol upgrades.
+- The membership proof does **not** use a `Set`: a Set reveals which element was tested. Membership is proven with a `HistoricMerkleTree` and a witness path. A `Set` is safe for the spent-tag check, because a tag is a value that is meant to be public.
+- Membership verification requires two conditions together: the root is recognised **and** the leaf is ours. The root check alone could be passed with a valid but unrelated leaf.
+- Proofs are generated **on the user's own device**. A hosted proof server is not an option here: it sees the witness in plain text.
+
+---
+
+## Honest limits
+
+These are stated rather than hidden, because hiding them only postpones the first serious review.
+
+| Limit | Reality |
 |---|---|
-| **Canlı sayaç** | Ledger public; tur sürerken sayaç akar. Küçük gruplarda zamanlama ile ilişkilendirme riski vardır — k-eşiği bu yüzden bir ürün ayarı değil, devre kuralıdır. Tam çözüm commit-reveal, v2'ye planlı. |
-| **Tekillik ≠ insanlık** | Devre "sır sahibiyim ve bu turda kullanmadım"ı kanıtlar, insan olduğunu kanıtlamaz. Stele bot doldurmasını engellediğini **iddia etmez**; kapalı roster ve ödülsüz model o ekonomiyi ithal etmez. |
-| **Sır = makbuz** | Sırrını paylaşan cevabını da paylaşmış olur; zorlama senaryosu çözülmemiştir. |
-| **Anonimlik dili** | Hukuken "anonim" değil, **takma adlı + kriptografik korumalı**. |
-| **Kayıt anı** | Kurum kimin kaydolduğunu görür (sırrı değil). Muhalifi listeye hiç almama riski protokolle çözülmez; savunma, kayıt listesinin açıklığıdır. |
-| **Mobil** | Katılım akışı kanıt üretimi gerektirir; v1'de masaüstü hedeflenir. |
-| **Güvence** | Bu kod **denetlenmiş değildir**. Söylenebilecek olan: açık kaynak, tekrarlanabilir derleme, gizlilik invariant testleri ve statik analiz. |
+| **Live tally** | The ledger is public, so the count moves while the round is open. In small groups this can be correlated by timing — which is why the anonymity floor is a circuit rule and not a product setting. The full fix is commit-reveal, planned for v2. |
+| **Uniqueness is not personhood** | The circuit proves "I hold a secret and have not spent it this round". It does not prove a human is behind it. Stele makes **no claim** to stop automated responses; a closed roster with no rewards simply does not import that economy. |
+| **The secret is also a receipt** | Anyone who shares their secret has also shared their answer. Coercion is not solved. |
+| **Wording** | Legally this is not "anonymous" but **pseudonymous and cryptographically protected**. |
+| **Registration** | The institution sees who registered, though never their secret. Excluding a critic from the roster is not solved by the protocol; the defence is that the roster is public. |
+| **Mobile** | Participation requires proof generation; v1 targets the desktop. |
+| **Assurance** | This code is **not audited**. What can be claimed: open source, reproducible builds, privacy-invariant tests, and static analysis. |
 
 ---
 
-## Kurulum
+## Setup
 
-Geliştirme Linux ve macOS'ta desteklenir. Windows'ta **WSL2** gerekir.
+Development is supported on Linux and macOS. On Windows, **WSL2** is required.
 
 ```bash
 # Toolchain
@@ -112,47 +112,47 @@ curl --proto '=https' --tlsv1.2 -LsSf \
   https://github.com/midnightntwrk/compact/releases/latest/download/compact-installer.sh | sh
 compact update            # compiler 0.31.1
 
-# Proof server — witness cihazdan çıkmaz, yerel çalışır
+# Proof server — runs locally, so the witness never leaves the device
 docker run -d -p 6300:6300 midnightntwrk/proof-server:8.1.0
 
-# Bağımlılıklar (Node >= 24)
+# Dependencies (Node >= 24)
 npm install
 ```
 
-## Derleme ve test
+## Build and test
 
 ```bash
 cd contract
-npm run compact      # Compact -> managed/ (zkir + prover/verifier anahtarları)
+npm run compact      # Compact -> managed/ (zkir + prover/verifier keys)
 npm run typecheck
 npx vitest run
 ```
 
-Test kümesi dört şeyi kanıtlar: turun taahhütlerinin değişmezliği, katılım mantığı ve tekillik damgası, faz makinesi kuralları, ve **gizlilik invariantı** — katılımcının sırrının hiçbir ledger alanında görünmediği.
+The suite proves four things: that a round's commitments are immutable, that participation and the uniqueness tag behave correctly, that the phase rules hold, and the **privacy invariant** — that the participant's secret appears in no ledger field.
 
 ---
 
-## Yapı
+## Layout
 
 ```
 stele/
-├── contract/     Compact kontratı, witness katmanı, testler
-├── api/          Paylaşılan tipler ve kontrat API'si
-├── stele-cli/    Komut satırı istemcisi
-└── stele-ui/     Web arayüzü
+├── contract/     Compact contract, witness layer, tests
+├── api/          Shared types and contract API
+├── stele-cli/    Command-line client
+└── stele-ui/     Web interface
 ```
 
-## Sürümler
+## Versions
 
-| Bileşen | Sürüm |
+| Component | Version |
 |---|---|
 | Compact compiler | 0.31.1 |
-| Compact dili | 0.23 |
+| Compact language | 0.23 |
 | Proof server | 8.1.0 |
 | Midnight.js | 4.1.1 |
 | DApp connector API | 4.0.1 |
 | Node | >= 24 |
 
-## Lisans
+## License
 
 Apache-2.0

@@ -1,16 +1,16 @@
-// STELE — private state ve witness fonksiyonları
+// STELE - private state and witness functions
 // SPDX-License-Identifier: Apache-2.0
 
 import { Ledger } from "./managed/stele/contract/index.js";
 import { WitnessContext } from "@midnight-ntwrk/midnight-js-protocol/compact-runtime";
 
 /**
- * Katılımcının cihazında kalan tek gizli veri: uygunluk sırrı.
+ * The only secret held on the participant's device: the eligibility secret.
  *
- * Bu değer hiçbir koşulda zincire, kuruma veya uzak bir sunucuya gitmez.
- * Kuruma yalnız commitment (H("stele:cm:", secret)) verilir. Sırrı bilen taraf
- * nullifier'ları önceden hesaplayabileceği için, sır merkezi olarak üretilirse
- * ledger'daki damga listesi o taraf için isim listesine dönüşür.
+ * It never travels to the chain, to the institution, or to a remote server.
+ * The institution only ever receives the commitment H("stele:cm:", secret).
+ * Whoever knows a secret can precompute its nullifiers, so a centrally issued
+ * secret would turn the public tag list into a roster of names.
  */
 export type StelePrivateState = {
   readonly secretKey: Uint8Array;
@@ -23,12 +23,11 @@ export const createStelePrivateState = (secretKey: Uint8Array): StelePrivateStat
 const MERKLE_DEPTH = 16;
 
 /**
- * Ağaçta bulunmayan bir commitment için şekilsel olarak geçerli ama
- * doğrulamayı geçemeyecek bir yol üretir.
+ * A structurally valid path for a commitment that is not in the tree.
  *
- * Witness fonksiyonu bir değer döndürmek zorunda; "bulamadım" diye hata
- * fırlatmak yerine geçersiz bir yol döndürürüz. Devre zaten iki koşulu birden
- * arıyor (checkRoot VE yaprak eşleşmesi), dolayısıyla bu yol reddedilir.
+ * A witness has to return something; rather than throwing "not found" we
+ * return a path that cannot pass verification. The circuit checks two things
+ * at once - the root is recognised AND the leaf is ours - so this is rejected.
  */
 const emptyPath = (leaf: Uint8Array) => ({
   leaf,
@@ -47,11 +46,11 @@ export const witnesses = {
   ],
 
   /**
-   * Commitment'ın uygunluk ağacındaki üyelik yolu.
+   * The commitment's membership path in the eligibility tree.
    *
-   * Yol yalnız kanıt üretimi sırasında kullanılır; zincire yazılan tek şey
-   * kökün eşleştiği bilgisidir. Hangi yaprağın kanıtlandığı görünmez —
-   * üyelik testinde Set kullanılmamasının sebebi tam olarak budur.
+   * The path is used only while producing the proof; all that reaches the
+   * ledger is that some recognised root matched. Which leaf was proven stays
+   * hidden - precisely why a Set cannot be used for the membership test.
    */
   eligibilityPath: (
     { ledger, privateState }: WitnessContext<Ledger, StelePrivateState>,

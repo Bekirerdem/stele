@@ -1,4 +1,4 @@
-// STELE — kontrat testleri
+// STELE - contract tests
 // SPDX-License-Identifier: Apache-2.0
 
 import { describe, it, expect } from "vitest";
@@ -14,7 +14,7 @@ import { Phase } from "../managed/stele/contract/index.js";
 
 setNetworkId("undeployed");
 
-/** Operatör sırrı + o sırdan türeyen tur parametreleri. */
+/** An operator secret plus a round committed to that operator's identity. */
 const newRound = (overrides: Partial<RoundParams> = {}) => {
   const operatorSecret = randomBytes(32);
   const params = {
@@ -24,11 +24,12 @@ const newRound = (overrides: Partial<RoundParams> = {}) => {
   return { operatorSecret, params };
 };
 
-describe("Stele — tur taahhütleri", () => {
-  it("turun değişmez taahhütlerini deploy anında kazır", () => {
+const hex = (u: Uint8Array) => Buffer.from(u).toString("hex");
+
+describe("Stele - round commitments", () => {
+  it("engraves the round's commitments at construction", () => {
     const { operatorSecret, params } = newRound();
-    const sim = new SteleSimulator(operatorSecret, params);
-    const l = sim.getLedger();
+    const l = new SteleSimulator(operatorSecret, params).getLedger();
 
     expect(l.roundNumber).toEqual(params.round);
     expect(l.questionHash).toEqual(params.question);
@@ -41,32 +42,31 @@ describe("Stele — tur taahhütleri", () => {
     expect(l.eligibleCount).toEqual(0n);
   });
 
-  it("aynı girdilerle aynı başlangıç durumunu üretir", () => {
+  it("produces the same initial state for the same inputs", () => {
     const { operatorSecret, params } = newRound();
     const a = new SteleSimulator(operatorSecret, params).getLedger();
     const b = new SteleSimulator(operatorSecret, params).getLedger();
 
-    // Ledger'da Merkle ağacı ve Set gibi davranışlı yapılar var; derin
-    // karşılaştırma yerine turun taahhüt ettiği değerleri kıyaslıyoruz.
+    // The ledger holds behavioural structures (a Merkle tree, a Set), so we
+    // compare the values the round commits to rather than the objects.
     const snapshot = (l: typeof a) => ({
       roundNumber: l.roundNumber,
-      questionHash: Buffer.from(l.questionHash).toString("hex"),
+      questionHash: hex(l.questionHash),
       optionCount: l.optionCount,
-      promiseHash: Buffer.from(l.promiseHash).toString("hex"),
+      promiseHash: hex(l.promiseHash),
       promiseThreshold: l.promiseThreshold,
       minParticipants: l.minParticipants,
-      operatorId: Buffer.from(l.operatorId).toString("hex"),
+      operatorId: hex(l.operatorId),
       phase: l.phase,
       participantCount: l.participantCount,
       eligibleCount: l.eligibleCount,
-      root: a.eligibility.root().field,
+      root: l.eligibility.root().field,
     });
     expect(snapshot(a)).toEqual(snapshot(b));
   });
 
-  it("commitment ve damga türetimi deterministiktir", () => {
+  it("derives commitments and tags deterministically", () => {
     const secret = randomBytes(32);
-    const hex = (u: Uint8Array) => Buffer.from(u).toString("hex");
 
     expect(hex(SteleSimulator.commitmentOf(secret))).toEqual(
       hex(SteleSimulator.commitmentOf(secret)),
@@ -77,8 +77,8 @@ describe("Stele — tur taahhütleri", () => {
   });
 });
 
-describe("Stele — katılım", () => {
-  it("uygun katılımcı seçtiği seçeneğin sayacını artırır", () => {
+describe("Stele - participation", () => {
+  it("counts an eligible participant's chosen option", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -95,18 +95,18 @@ describe("Stele — katılım", () => {
     expect(l.nullifiers.size()).toEqual(1n);
   });
 
-  it("kayıtlı olmayan kişiyi reddeder", () => {
+  it("rejects someone who never registered", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 
     sim.register(SteleSimulator.commitmentOf(randomBytes(32)));
     sim.openVoting();
 
-    sim.switchUser(randomBytes(32)); // hiç kaydolmamış biri
+    sim.switchUser(randomBytes(32));
     expect(() => sim.participate(0n)).toThrow();
   });
 
-  it("aynı sırla ikinci kez katılmayı reddeder (tekillik damgası)", () => {
+  it("rejects a second answer from the same secret", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -120,7 +120,7 @@ describe("Stele — katılım", () => {
     expect(sim.getLedger().participantCount).toEqual(1n);
   });
 
-  it("geçerli aralık dışındaki cevabı reddeder", () => {
+  it("rejects an answer outside the declared range", () => {
     const { operatorSecret, params } = newRound({ options: 3n });
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -133,8 +133,8 @@ describe("Stele — katılım", () => {
   });
 });
 
-describe("Stele — faz makinesi", () => {
-  it("kayıt fazında oy kabul etmez", () => {
+describe("Stele - phases", () => {
+  it("accepts no answers while registration is open", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -145,7 +145,7 @@ describe("Stele — faz makinesi", () => {
     expect(() => sim.participate(0n)).toThrow();
   });
 
-  it("oylama açıldıktan sonra yeni kayıt kabul etmez (kök donar)", () => {
+  it("accepts no registrations once voting opens (the root freezes)", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -155,16 +155,16 @@ describe("Stele — faz makinesi", () => {
     expect(() => sim.register(SteleSimulator.commitmentOf(randomBytes(32)))).toThrow();
   });
 
-  it("faz geçişlerini yalnız operatör yapabilir", () => {
+  it("lets only the operator move the phase", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 
     sim.register(SteleSimulator.commitmentOf(randomBytes(32)));
-    sim.switchUser(randomBytes(32)); // operatör değil
+    sim.switchUser(randomBytes(32));
     expect(() => sim.openVoting()).toThrow();
   });
 
-  it("k-eşiğinin altındaki turu kapatmayı reddeder", () => {
+  it("refuses to close a round below the anonymity floor", () => {
     const { operatorSecret, params } = newRound({ minCount: 2n });
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -172,15 +172,14 @@ describe("Stele — faz makinesi", () => {
     sim.register(SteleSimulator.commitmentOf(voter));
     sim.openVoting();
     sim.switchUser(voter);
-    sim.participate(0n); // yalnız 1 katılım, eşik 2
+    sim.participate(0n); // one participant, floor is two
 
     sim.switchUser(operatorSecret);
     expect(() => sim.closeRound()).toThrow();
-
     expect(sim.getLedger().phase).toEqual(Phase.VOTING);
   });
 
-  it("eşik karşılandığında turu kapatır", () => {
+  it("closes the round once the floor is met", () => {
     const { operatorSecret, params } = newRound({ minCount: 2n });
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -205,8 +204,8 @@ describe("Stele — faz makinesi", () => {
   });
 });
 
-describe("Stele — gizlilik invariantı", () => {
-  it("katılımcının sırrı hiçbir ledger alanında görünmez", () => {
+describe("Stele - privacy invariant", () => {
+  it("never exposes the participant's secret in any ledger field", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 
@@ -216,36 +215,30 @@ describe("Stele — gizlilik invariantı", () => {
     sim.switchUser(voter);
     sim.participate(1n);
 
-    // Ledger'ın tamamını tarayıp sırrın bayt dizisini arıyoruz.
+    // Scan the entire ledger for the secret's bytes.
     const dump = JSON.stringify(sim.getLedger(), (_k, v) =>
       typeof v === "bigint" ? v.toString() : v,
     );
-    const secretHex = Buffer.from(voter).toString("hex");
-    expect(dump).not.toContain(secretHex);
+    expect(dump).not.toContain(hex(voter));
 
-    // Damga ve commitment sırdan türetilmiş olsa da sırrın kendisi değildir.
+    // The tag is derived from the secret but is not the secret.
     const nullifier = SteleSimulator.nullifierOf(voter, roundToBytes(params.round));
-    expect(Buffer.from(nullifier).toString("hex")).not.toEqual(secretHex);
+    expect(hex(nullifier)).not.toEqual(hex(voter));
   });
 
-  it("damga sırra geri götürülemez ve turlar arasında bağlanamaz", () => {
+  it("keeps tags unlinkable across rounds", () => {
     const voter = randomBytes(32);
     const n1 = SteleSimulator.nullifierOf(voter, roundToBytes(1n));
     const n2 = SteleSimulator.nullifierOf(voter, roundToBytes(2n));
 
-    // Aynı kişi, farklı turlar -> ilişkisiz damgalar.
-    expect(Buffer.from(n1).toString("hex")).not.toEqual(
-      Buffer.from(n2).toString("hex"),
-    );
+    // Same person, different rounds -> unrelated tags.
+    expect(hex(n1)).not.toEqual(hex(n2));
 
-    // Commitment de damgadan farklı bir alanda yaşar.
-    const cm = SteleSimulator.commitmentOf(voter);
-    expect(Buffer.from(cm).toString("hex")).not.toEqual(
-      Buffer.from(n1).toString("hex"),
-    );
+    // And the commitment lives in its own domain.
+    expect(hex(SteleSimulator.commitmentOf(voter))).not.toEqual(hex(n1));
   });
 
-  it("katılım özel durumu değiştirmez", () => {
+  it("leaves the private state untouched by participation", () => {
     const { operatorSecret, params } = newRound();
     const sim = new SteleSimulator(operatorSecret, params);
 

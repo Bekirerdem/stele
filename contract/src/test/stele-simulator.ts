@@ -1,4 +1,4 @@
-// STELE — test tezgahı
+// STELE - test harness
 // SPDX-License-Identifier: Apache-2.0
 
 import {
@@ -16,7 +16,7 @@ import {
 } from "../managed/stele/contract/index.js";
 import { type StelePrivateState, witnesses } from "../witnesses.js";
 
-/** Bir turun değişmez taahhütleri (deploy anında yazılır). */
+/** The commitments a round is opened with. */
 export type RoundParams = {
   round: bigint;
   question: Uint8Array;
@@ -27,7 +27,7 @@ export type RoundParams = {
   operator: Uint8Array;
 };
 
-/** Testlerde kullanılan makul varsayılanlar. */
+/** Reasonable defaults for tests. */
 export const defaultRound = (operator: Uint8Array): RoundParams => ({
   round: 1n,
   question: new Uint8Array(32).fill(7),
@@ -66,7 +66,7 @@ export class SteleSimulator {
     };
   }
 
-  /** Başka bir katılımcının cihazına geçmiş gibi davran. */
+  /** Act as if we had moved to another participant's device. */
   public switchUser(secretKey: Uint8Array): void {
     this.circuitContext.currentPrivateState = { secretKey };
   }
@@ -107,7 +107,7 @@ export class SteleSimulator {
     return this.getLedger();
   }
 
-  /** Katılımcının kendi cihazında hesapladığı değerler (zincire gitmez). */
+  /** Values a participant derives on their own device; none of these travel. */
   public static commitmentOf(secret: Uint8Array): Uint8Array {
     return pureCircuits.commitmentOf(secret);
   }
@@ -121,7 +121,7 @@ export class SteleSimulator {
   }
 }
 
-/** Uint64 tur numarasını devrenin beklediği 32 baytlık forma çevirir. */
+/** Convert a Uint64 round number into the 32-byte form the circuit expects. */
 export const roundToBytes = (round: bigint): Uint8Array => {
   const out = new Uint8Array(32);
   let v = round;
