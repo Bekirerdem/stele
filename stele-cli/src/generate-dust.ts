@@ -46,7 +46,11 @@ export const generateDust = async (
   unshieldedState: UnshieldedWalletState,
   walletFacade: WalletFacade,
 ) => {
-  const dustState = await walletFacade.dust.waitForSyncedState();
+  // The dust wallet's waitForSyncedState() has the same problem as the
+  // unshielded one: it will not answer until it has walked the whole chain,
+  // and Preprod is around 1.9 million blocks deep. The only thing needed here
+  // is the address, and the service exposes it directly.
+  const dustAddress = await walletFacade.dust.getAddress();
   const networkId = getNetworkId();
   const unshieldedKeystore = createKeystore(getUnshieldedSeed(walletSeed), networkId);
   const utxos = unshieldedState.availableCoins.filter((coin) => !coin.meta.registeredForDustGeneration);
@@ -62,7 +66,7 @@ export const generateDust = async (
     utxos,
     unshieldedKeystore.getPublicKey(),
     (payload) => unshieldedKeystore.signData(payload),
-    dustState.address,
+    dustAddress,
   );
   const transaction = await walletFacade.finalizeRecipe(recipe);
   const txId = await walletFacade.submitTransaction(transaction);
