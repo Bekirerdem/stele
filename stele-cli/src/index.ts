@@ -295,6 +295,35 @@ const buildWallet = async (config: Config, rli: Interface, logger: Logger): Prom
   }
 };
 
+/**
+ * Assemble the providers a round needs.
+ *
+ * The proof server runs locally, so the witness - the eligibility secret and
+ * the answer - never leaves this machine.
+ */
+export const buildProviders = (
+  config: Config,
+  envConfiguration: { indexer: string; indexerWS: string; proofServer: string },
+  walletProvider: MidnightWalletProvider,
+  seed: string,
+): SteleProviders => {
+  const zkConfigProvider = new NodeZkConfigProvider<SteleCircuitKeys>(config.zkConfigPath);
+
+  return {
+    privateStateProvider: levelPrivateStateProvider<PrivateStateId, StelePrivateState>({
+      privateStateStoreName: config.privateStateStoreName,
+      signingKeyStoreName: `${config.privateStateStoreName}-signing-keys`,
+      privateStoragePasswordProvider: () => 'Stele-Test-2026!',
+      accountId: seed,
+    }),
+    publicDataProvider: indexerPublicDataProvider(envConfiguration.indexer, envConfiguration.indexerWS),
+    zkConfigProvider,
+    proofProvider: httpClientProofProvider(envConfiguration.proofServer, zkConfigProvider),
+    walletProvider,
+    midnightProvider: walletProvider,
+  };
+};
+
 export const run = async (config: Config, testEnv: TestEnvironment, logger: Logger): Promise<void> => {
   const rli = createInterface({ input, output, terminal: true });
   const providersToBeStopped: MidnightWalletProvider[] = [];
@@ -327,22 +356,7 @@ export const run = async (config: Config, testEnv: TestEnvironment, logger: Logg
       }
     }
 
-    // The proof server runs locally, so the witness - the eligibility secret
-    // and the answer - never leaves this machine.
-    const zkConfigProvider = new NodeZkConfigProvider<SteleCircuitKeys>(config.zkConfigPath);
-    const providers: SteleProviders = {
-      privateStateProvider: levelPrivateStateProvider<PrivateStateId, StelePrivateState>({
-        privateStateStoreName: config.privateStateStoreName,
-        signingKeyStoreName: `${config.privateStateStoreName}-signing-keys`,
-        privateStoragePasswordProvider: () => 'Stele-Test-2026!',
-        accountId: seed,
-      }),
-      publicDataProvider: indexerPublicDataProvider(envConfiguration.indexer, envConfiguration.indexerWS),
-      zkConfigProvider,
-      proofProvider: httpClientProofProvider(envConfiguration.proofServer, zkConfigProvider),
-      walletProvider,
-      midnightProvider: walletProvider,
-    };
+    const providers = buildProviders(config, envConfiguration, walletProvider, seed);
     await mainLoop(providers, rli, logger);
   } catch (e) {
     logError(logger, e);
