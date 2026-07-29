@@ -1,56 +1,38 @@
-// This file is part of midnightntwrk/example-bboard.
-// Copyright (C) Midnight Foundation
+// STELE - application root
 // SPDX-License-Identifier: Apache-2.0
-// Licensed under the Apache License, Version 2.0 (the "License");
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 import React, { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
-import { MainLayout, Board } from './components';
-import { useDeployedBoardContext } from './hooks';
-import { type BoardDeployment } from './contexts';
+import { MainLayout, Round } from './components';
+import { useDeployedRoundContext } from './hooks';
+import { type RoundDeployment } from './contexts';
 import { type Observable } from 'rxjs';
 
 /**
- * The root bulletin board application component.
+ * The root component.
  *
- * @remarks
- * The {@link App} component requires a `<DeployedBoardProvider />` parent in order to retrieve
- * information about current bulletin board deployments.
- *
- * @internal
+ * Requires a `<DeployedRoundProvider />` parent to retrieve the current round
+ * deployments.
  */
 const App: React.FC = () => {
-  const boardApiProvider = useDeployedBoardContext();
-  const [boardDeployments, setBoardDeployments] = useState<Array<Observable<BoardDeployment>>>([]);
+  const roundApiProvider = useDeployedRoundContext();
+  const [roundDeployments, setRoundDeployments] = useState<Array<Observable<RoundDeployment>>>([]);
 
   useEffect(() => {
-    const subscription = boardApiProvider.boardDeployments$.subscribe(setBoardDeployments);
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [boardApiProvider]);
+    const subscription = roundApiProvider.roundDeployments$.subscribe(setRoundDeployments);
+    return () => subscription.unsubscribe();
+  }, [roundApiProvider]);
 
   return (
     <Box sx={{ background: '#000', minHeight: '100vh' }}>
       <MainLayout>
-        {boardDeployments.map((boardDeployment, idx) => (
-          <div data-testid={`board-${idx}`} key={`board-${idx}`}>
-            <Board boardDeployment$={boardDeployment} />
+        {roundDeployments.map((roundDeployment, idx) => (
+          <div data-testid={`round-${idx}`} key={`round-${idx}`}>
+            <Round roundDeployment$={roundDeployment} />
           </div>
         ))}
-        <div data-testid="board-start">
-          <Board />
+        <div data-testid="round-start">
+          <Round />
         </div>
       </MainLayout>
     </Box>

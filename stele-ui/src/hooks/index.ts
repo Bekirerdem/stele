@@ -1,4 +1,4 @@
-// This file is part of midnightntwrk/example-bboard.
+// This file is part of midnightntwrk/stele.
 // Copyright (C) Midnight Foundation
 // SPDX-License-Identifier: Apache-2.0
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,4 +13,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-export * from './useDeployedBoardContext';
+export * from './useDeployedRoundContext';

@@ -1,4 +1,4 @@
-// This file is part of midnightntwrk/example-bboard.
+// This file is part of midnightntwrk/stele.
 // Copyright (C) Midnight Foundation
 // SPDX-License-Identifier: Apache-2.0
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +14,13 @@
 // limitations under the License.
 
 import React, { type PropsWithChildren, createContext } from 'react';
-import { type DeployedBoardAPIProvider, BrowserDeployedBoardManager } from './BrowserDeployedBoardManager';
+import { type DeployedRoundAPIProvider, BrowserDeployedRoundManager } from './BrowserDeployedRoundManager';
 import { type Logger } from 'pino';
 
 /**
  * Encapsulates a deployed boards provider as a context object.
  */
-export const DeployedBoardContext = createContext<DeployedBoardAPIProvider | undefined>(undefined);
+export const DeployedRoundContext = createContext<DeployedRoundAPIProvider | undefined>(undefined);
 
 /**
  * The props required by the {@link DeployedBoardProvider} component.
@@ -31,11 +31,11 @@ export type DeployedBoardProviderProps = PropsWithChildren<{
 }>;
 
 /**
- * A React component that sets a new {@link BrowserDeployedBoardManager} object as the currently
+ * A React component that sets a new {@link BrowserDeployedRoundManager} object as the currently
  * in-scope deployed board provider.
  */
 export const DeployedBoardProvider: React.FC<Readonly<DeployedBoardProviderProps>> = ({ logger, children }) => (
-  <DeployedBoardContext.Provider value={new BrowserDeployedBoardManager(logger)}>
+  <DeployedRoundContext.Provider value={new BrowserDeployedRoundManager(logger)}>
     {children}
-  </DeployedBoardContext.Provider>
+  </DeployedRoundContext.Provider>
 );

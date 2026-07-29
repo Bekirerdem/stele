@@ -1,4 +1,4 @@
-// This file is part of midnightntwrk/example-bboard.
+// This file is part of midnightntwrk/stele.
 // Copyright (C) Midnight Foundation
 // SPDX-License-Identifier: Apache-2.0
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +14,17 @@
 // limitations under the License.
 
 import { useContext } from 'react';
-import { DeployedBoardContext, type DeployedBoardAPIProvider } from '../contexts';
+import { DeployedRoundContext, type DeployedRoundAPIProvider } from '../contexts';
 
 /**
  * Retrieves the currently in-scope deployed boards provider.
  *
- * @returns The currently in-scope {@link DeployedBBoardAPIProvider} implementation.
+ * @returns The currently in-scope {@link DeployedSteleAPIProvider} implementation.
  *
  * @internal
  */
-export const useDeployedBoardContext = (): DeployedBoardAPIProvider => {
-  const context = useContext(DeployedBoardContext);
+export const useDeployedRoundContext = (): DeployedRoundAPIProvider => {
+  const context = useContext(DeployedRoundContext);
 
   if (!context) {
     throw new Error('A <DeployedBoardProvider /> is required.');

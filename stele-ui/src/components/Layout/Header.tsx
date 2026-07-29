@@ -1,4 +1,4 @@
-// This file is part of midnightntwrk/example-bboard.
+// This file is part of midnightntwrk/stele.
 // Copyright (C) Midnight Foundation
 // SPDX-License-Identifier: Apache-2.0
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +17,7 @@ import React from 'react';
 import { AppBar, Box } from '@mui/material';
 
 /**
- * A simple application level header for the bulletin board application.
+ * A simple application level header for the round application.
  */
 export const Header: React.FC = () => (
   <AppBar
