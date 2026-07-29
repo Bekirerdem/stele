@@ -45,10 +45,18 @@ jobs:
       # tests - including the privacy invariant that scans the ledger for the
       # participant's secret. No proof server here: real proof generation is
       # slow and belongs in a deploy job, not on every push.
-      #
-      # The api, cli and ui packages still carry the scaffold's example logic.
-      # They join this workflow as they are rewritten for Stele, so that a
-      # green run always means something that actually exists passed.
       - name: Contract
         working-directory: contract
         run: npm run ci
+
+      - name: API
+        working-directory: api
+        run: npm run ci
+
+      - name: CLI
+        working-directory: stele-cli
+        run: npm run ci
+
+      # The ui package still carries the scaffold's example screens. It joins
+      # this workflow once it is rewritten for Stele, so that a green run
+      # always means something that actually exists passed.
