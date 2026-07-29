@@ -9,56 +9,53 @@ on:
 permissions: {}
 
 jobs:
-  install-and-test:
+  build-and-test:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  #v7.0.0
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      - name: Setup Compact Compiler
+      # Pinned to the version in the Midnight compatibility matrix. The
+      # compiler and the runtime have to match exactly, so this is not a
+      # floating version.
+      - name: Setup Compact compiler
         uses: midnightntwrk/setup-compact-action@836895c8fffbbea6bd986af2b17e8941ff29d1f8
         with:
-          compact-version: '0.31.0'
+          compact-version: '0.31.1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  #v6.4.0
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
-          node-version: "24"
+          node-version: '24'
 
-      # A bug in npm optional dependencies fails the build, which is fixed in npm 11 or later
-      # but the setup-node action isn't using a newer version of npm yet
+      # npm's optional-dependency handling breaks the install before v11.
       # See https://github.com/npm/cli/issues/4828
-      - name: Update NPM
-        run: |
-          npm install -g npm@latest
-          npm --version
+      - name: Update npm
+        run: npm install -g npm@latest
 
-      # We use --legacy-peer-deps because as of v3.4.1 vite-plugin-wasm doesn't play well with vite 7
-      # So this allows them to be installed regardless; They *have* implemented support, they just haven't published a release yet
-      # https://github.com/Menci/vite-plugin-wasm/pull/73
+      # vite-plugin-wasm has not published its vite 7 support yet.
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
-      - name: Compile and test contract
+      # Compiles the circuits, type-checks, lints, builds, and runs the
+      # privacy-invariant tests. No proof server here: real proof generation
+      # is slow and belongs in a deploy job, not on every push.
+      - name: Contract
         working-directory: contract
-        run: |
-          npm run ci
+        run: npm run ci
 
-      - name: api
+      - name: API
         working-directory: api
-        run: |
-          npm run ci
+        run: npm run ci
 
-      - name: Compile bboard-cli
-        working-directory: bboard-cli
-        run: |
-          npm run ci
+      - name: CLI
+        working-directory: stele-cli
+        run: npm run ci
 
-      - name: Compile bboard-ui
-        working-directory: bboard-ui
-        run: |
-          npm run ci
+      - name: UI
+        working-directory: stele-ui
+        run: npm run ci
