@@ -102,6 +102,29 @@ These are stated rather than hidden, because hiding them only postpones the firs
 
 ---
 
+## The registry
+
+The chain cannot be searched for "every contract of this kind" — the indexer answers about an address you already know. So a verifier cannot scan for a round it was never told about, and on its own the claim that a round cannot be buried would rest on nothing.
+
+One permanent append-only contract fixes that, with a rule: **only rounds recorded in the registry count.** A round number can be claimed once and never reassigned. Burying a round then no longer means hiding it — it means leaving it unofficial, which is a far weaker thing to do.
+
+Recording the highest number alongside the count makes a skipped round visible arithmetically: three entries reaching number five means two were never filled. That is readable without searching anything.
+
+## The mirror
+
+Midnight has no source-verification service, so a deployed contract is otherwise only as trustworthy as whoever tells you what it contains.
+
+Every circuit on chain carries a verifier key, and the same source compiled with the same pinned compiler produces the same key byte for byte. So:
+
+```bash
+cd stele-cli
+npm run verify -- <contract-address>
+```
+
+prints what the round committed to and the verifier keys of the local build. Recompile the published source, compare the keys, and you have confirmed the deployed contract is the published one — without asking the operator for anything.
+
+Publish the question and promise texts alongside a round; their SHA-256 digests must equal the hashes on chain, or the round was reworded after the fact.
+
 ## Setup
 
 Development is supported on Linux and macOS. On Windows, **WSL2** is required.
@@ -123,12 +146,27 @@ npm install
 
 ```bash
 cd contract
-npm run compact      # Compact -> managed/ (zkir + prover/verifier keys)
+npm run compact      # both contracts -> managed/ (zkir + prover/verifier keys)
 npm run typecheck
-npx vitest run
+npx vitest run       # 21 tests
 ```
 
-The suite proves four things: that a round's commitments are immutable, that participation and the uniqueness tag behave correctly, that the phase rules hold, and the **privacy invariant** — that the participant's secret appears in no ledger field.
+The suite proves five things: that a round's commitments are immutable, that participation and the uniqueness tag behave correctly, that the phase rules hold, that the registry refuses to reassign a number and exposes a gap, and the **privacy invariant** — that the participant's secret appears in no ledger field.
+
+## Running a round
+
+```bash
+cd stele-cli
+npm run addresses          # which address to fund
+npm run balance            # has the faucet arrived
+npm run deploy:preprod     # open a round non-interactively
+npm run preprod-remote     # interactive operator/participant client
+npm run verify -- <addr>   # the mirror
+```
+
+Deployment reads the round's commitments from the environment (`STELE_QUESTION`, `STELE_PROMISE`, `STELE_OPTIONS`, `STELE_THRESHOLD`, `STELE_MIN`, `STELE_ROUND`) so a round can be reproduced exactly.
+
+> A note for anyone hitting the same wall: the SDK's `waitForUnshieldedFunds` reports a balance only after the wallet has fully synced, and Preprod is around 1.9 million blocks deep. Waiting for the balance itself instead finds the funds in seconds and keeps memory flat.
 
 ---
 
