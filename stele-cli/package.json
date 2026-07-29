@@ -16,7 +16,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "deploy:preprod": "node --max-old-space-size=13312 --experimental-specifier-resolution=node --loader ts-node/esm src/deploy-round.ts",
     "balance": "node --max-old-space-size=13312 --experimental-specifier-resolution=node --loader ts-node/esm src/check-balance.ts",
-    "addresses": "node --max-old-space-size=13312 --experimental-specifier-resolution=node --loader ts-node/esm src/show-addresses.ts"
+    "addresses": "node --max-old-space-size=13312 --experimental-specifier-resolution=node --loader ts-node/esm src/show-addresses.ts",
+    "verify": "node --max-old-space-size=13312 --experimental-specifier-resolution=node --loader ts-node/esm src/verify-round.ts"
   },
   "devDependencies": {
     "@types/json-schema": "^7.0.15",

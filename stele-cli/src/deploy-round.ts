@@ -19,13 +19,14 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { createHash, randomBytes as nodeRandomBytes } from 'node:crypto';
 import { WebSocket } from 'ws';
+import * as Rx from 'rxjs';
 import { SteleAPI, type RoundParams } from '../../api/src/index';
 import { pureCircuits } from '../../contract/src/managed/stele/contract/index.js';
 import { createLogger } from './logger-utils.js';
 import { PreprodRemoteConfig } from './config.js';
 import { MidnightWalletProvider } from './midnight-wallet-provider';
 import { buildProviders } from './index.js';
-import { syncWallet, waitForUnshieldedFunds } from './wallet-utils';
+import { syncWallet } from './wallet-utils';
 import { generateDust } from './generate-dust';
 import { unshieldedToken } from '@midnight-ntwrk/midnight-js-protocol/ledger';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
@@ -70,9 +71,26 @@ const main = async (): Promise<void> => {
   const walletFacade: WalletFacade = walletProvider.wallet;
 
   try {
+    // The helper in wallet-utils waits for a fully synced wallet before it
+    // reports a balance. Preprod is ~1.9M blocks deep and that wait exhausts
+    // the heap long before it finishes. The funds are visible far earlier, so
+    // we wait for the balance itself rather than for the sync to complete.
     logger.info('Waiting for NIGHT. Fund this wallet from the Preprod faucet if it has no balance.');
-    const unshieldedState = await waitForUnshieldedFunds(logger, walletFacade, envConfiguration, unshieldedToken());
-    const nightBalance = unshieldedState.balances[unshieldedToken().raw];
+    const token = unshieldedToken().raw;
+
+    const funded = await Rx.firstValueFrom(
+      walletFacade.state().pipe(
+        Rx.tap((state) => {
+          const seen = state.unshielded.balances[token] ?? 0n;
+          logger.info(`waiting for funds: balance=${seen.toString()}`);
+        }),
+        Rx.filter((state) => (state.unshielded.balances[token] ?? 0n) > 0n),
+        Rx.timeout(10 * 60 * 1000),
+      ),
+    );
+
+    const unshieldedState = funded.unshielded;
+    const nightBalance = unshieldedState.balances[token];
 
     if (nightBalance === undefined) {
       logger.error('No NIGHT received; cannot pay for the deployment.');
