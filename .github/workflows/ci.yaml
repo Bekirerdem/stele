@@ -57,6 +57,6 @@ jobs:
         working-directory: stele-cli
         run: npm run ci
 
-      # The ui package still carries the scaffold's example screens. It joins
-      # this workflow once it is rewritten for Stele, so that a green run
-      # always means something that actually exists passed.
+      - name: UI
+        working-directory: stele-ui
+        run: npm run ci
