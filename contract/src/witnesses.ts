@@ -16,7 +16,9 @@ export type StelePrivateState = {
   readonly secretKey: Uint8Array;
 };
 
-export const createStelePrivateState = (secretKey: Uint8Array): StelePrivateState => ({
+export const createStelePrivateState = (
+  secretKey: Uint8Array,
+): StelePrivateState => ({
   secretKey,
 });
 
@@ -40,10 +42,10 @@ const emptyPath = (leaf: Uint8Array) => ({
 export const witnesses = {
   localSecret: ({
     privateState,
-  }: WitnessContext<Ledger, StelePrivateState>): [StelePrivateState, Uint8Array] => [
-    privateState,
-    privateState.secretKey,
-  ],
+  }: WitnessContext<Ledger, StelePrivateState>): [
+    StelePrivateState,
+    Uint8Array,
+  ] => [privateState, privateState.secretKey],
 
   /**
    * The commitment's membership path in the eligibility tree.
@@ -57,9 +59,6 @@ export const witnesses = {
     cm: Uint8Array,
   ): [StelePrivateState, ReturnType<typeof emptyPath>] => {
     const found = ledger.eligibility.findPathForLeaf(cm);
-    return [
-      privateState,
-      (found as ReturnType<typeof emptyPath> | undefined) ?? emptyPath(cm),
-    ];
+    return [privateState, found ?? emptyPath(cm)];
   },
 };

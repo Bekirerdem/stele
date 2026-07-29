@@ -44,17 +44,20 @@ export class SteleSimulator {
 
   constructor(secretKey: Uint8Array, params: RoundParams) {
     this.contract = new Contract<StelePrivateState>(witnesses);
-    const { currentPrivateState, currentContractState, currentZswapLocalState } =
-      this.contract.initialState(
-        createConstructorContext({ secretKey }, "0".repeat(64)),
-        params.round,
-        params.question,
-        params.options,
-        params.promise,
-        params.threshold,
-        params.minCount,
-        params.operator,
-      );
+    const {
+      currentPrivateState,
+      currentContractState,
+      currentZswapLocalState,
+    } = this.contract.initialState(
+      createConstructorContext({ secretKey }, "0".repeat(64)),
+      params.round,
+      params.question,
+      params.options,
+      params.promise,
+      params.threshold,
+      params.minCount,
+      params.operator,
+    );
     this.circuitContext = {
       currentPrivateState,
       currentZswapLocalState,
@@ -88,8 +91,9 @@ export class SteleSimulator {
   }
 
   public openVoting(): Ledger {
-    this.circuitContext =
-      this.contract.impureCircuits.openVoting(this.circuitContext).context;
+    this.circuitContext = this.contract.impureCircuits.openVoting(
+      this.circuitContext,
+    ).context;
     return this.getLedger();
   }
 
@@ -102,8 +106,9 @@ export class SteleSimulator {
   }
 
   public closeRound(): Ledger {
-    this.circuitContext =
-      this.contract.impureCircuits.closeRound(this.circuitContext).context;
+    this.circuitContext = this.contract.impureCircuits.closeRound(
+      this.circuitContext,
+    ).context;
     return this.getLedger();
   }
 

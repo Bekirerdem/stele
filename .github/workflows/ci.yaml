@@ -9,7 +9,7 @@ on:
 permissions: {}
 
 jobs:
-  build-and-test:
+  contract:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -42,20 +42,13 @@ jobs:
         run: npm ci --legacy-peer-deps
 
       # Compiles the circuits, type-checks, lints, builds, and runs the
-      # privacy-invariant tests. No proof server here: real proof generation
-      # is slow and belongs in a deploy job, not on every push.
+      # tests - including the privacy invariant that scans the ledger for the
+      # participant's secret. No proof server here: real proof generation is
+      # slow and belongs in a deploy job, not on every push.
+      #
+      # The api, cli and ui packages still carry the scaffold's example logic.
+      # They join this workflow as they are rewritten for Stele, so that a
+      # green run always means something that actually exists passed.
       - name: Contract
         working-directory: contract
-        run: npm run ci
-
-      - name: API
-        working-directory: api
-        run: npm run ci
-
-      - name: CLI
-        working-directory: stele-cli
-        run: npm run ci
-
-      - name: UI
-        working-directory: stele-ui
         run: npm run ci

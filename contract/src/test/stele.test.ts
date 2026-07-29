@@ -152,7 +152,9 @@ describe("Stele - phases", () => {
     sim.register(SteleSimulator.commitmentOf(randomBytes(32)));
     sim.openVoting();
 
-    expect(() => sim.register(SteleSimulator.commitmentOf(randomBytes(32)))).toThrow();
+    expect(() =>
+      sim.register(SteleSimulator.commitmentOf(randomBytes(32))),
+    ).toThrow();
   });
 
   it("lets only the operator move the phase", () => {
@@ -216,13 +218,16 @@ describe("Stele - privacy invariant", () => {
     sim.participate(1n);
 
     // Scan the entire ledger for the secret's bytes.
-    const dump = JSON.stringify(sim.getLedger(), (_k, v) =>
+    const dump = JSON.stringify(sim.getLedger(), (_k: string, v: unknown) =>
       typeof v === "bigint" ? v.toString() : v,
     );
     expect(dump).not.toContain(hex(voter));
 
     // The tag is derived from the secret but is not the secret.
-    const nullifier = SteleSimulator.nullifierOf(voter, roundToBytes(params.round));
+    const nullifier = SteleSimulator.nullifierOf(
+      voter,
+      roundToBytes(params.round),
+    );
     expect(hex(nullifier)).not.toEqual(hex(voter));
   });
 
