@@ -1,249 +1,233 @@
-// This file is part of midnightntwrk/example-bboard.
-// Copyright (C) Midnight Foundation
+// STELE - client API for a deployed round
 // SPDX-License-Identifier: Apache-2.0
-// Licensed under the Apache License, Version 2.0 (the "License");
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 /**
- * Provides types and utilities for working with bulletin board contracts.
+ * Types and utilities for working with Stele round contracts.
  *
  * @packageDocumentation
  */
 
-import * as BBoard from '../../contract/src/managed/bboard/contract/index.js';
+import * as Stele from '../../contract/src/managed/stele/contract/index.js';
 
-import { type ContractAddress, convertFieldToBytes } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
+import { type ContractAddress } from '@midnight-ntwrk/midnight-js-protocol/compact-runtime';
 import { type Logger } from 'pino';
 import {
-  type BBoardDerivedState,
-  type BBoardContract,
-  type BBoardProviders,
-  type DeployedBBoardContract,
-  bboardPrivateStateKey,
+  type RoundParams,
+  type SteleContract,
+  type SteleDerivedState,
+  type SteleProviders,
+  type DeployedSteleContract,
+  stelePrivateStateKey,
 } from './common-types.js';
-import { CompiledBBoardContractContract } from '../../contract/src/index';
+import { SteleContract as CompiledStele } from '../../contract/src/index';
 import * as utils from './utils/index.js';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
-import { combineLatest, map, tap, from, type Observable } from 'rxjs';
+import { combineLatest, map, from, type Observable } from 'rxjs';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
-import { BBoardPrivateState, createBBoardPrivateState } from '../../contract/src/witnesses.js';
+import { type StelePrivateState, createStelePrivateState } from '../../contract/src/witnesses.js';
 
-/** @internal */
+/** Convert a round number into the 32-byte form the circuit expects. */
+export const roundToBytes = (round: bigint): Uint8Array => {
+  const out = new Uint8Array(32);
+  let v = round;
+  for (let i = 0; i < 8; i++) {
+    out[i] = Number(v & 0xffn);
+    v >>= 8n;
+  }
+  return out;
+};
 
 /**
- * An API for a deployed bulletin board.
+ * The API of a deployed Stele round.
  */
-export interface DeployedBBoardAPI {
+export interface DeployedSteleAPI {
   readonly deployedContractAddress: ContractAddress;
-  readonly state$: Observable<BBoardDerivedState>;
+  readonly state$: Observable<SteleDerivedState>;
 
-  post: (message: string) => Promise<void>;
-  takeDown: () => Promise<void>;
+  register: () => Promise<void>;
+  openVoting: () => Promise<void>;
+  participate: (choice: bigint) => Promise<void>;
+  closeRound: () => Promise<void>;
 }
 
 /**
- * Provides an implementation of {@link DeployedBBoardAPI} by adapting a deployed bulletin board
- * contract.
+ * Adapts a deployed round contract into {@link DeployedSteleAPI}.
  *
- * @remarks
- * The `BBoardPrivateState` is managed at the DApp level by a private state provider. As such, this
- * private state is shared between all instances of {@link BBoardAPI}, and their underlying deployed
- * contracts. The private state defines a `'secretKey'` property that effectively identifies the current
- * user, and is used to determine if the current user is the owner of the message as the observable
- * contract state changes.
- *
- * In the future, Midnight.js will provide a private state provider that supports private state storage
- * keyed by contract address. This will remove the current workaround of sharing private state across
- * the deployed bulletin board contracts, and allows for a unique secret key to be generated for each bulletin
- * board that the user interacts with.
+ * The eligibility secret lives in the private state provider and never leaves
+ * the device. Everything this class exposes is either already public on the
+ * ledger or derived locally from that secret - it can answer "am I registered"
+ * and "have I already answered", never the same question about anyone else.
  */
-// TODO: Update BBoardAPI to use contract level private state storage.
-export class BBoardAPI implements DeployedBBoardAPI {
-  /** @internal */
+export class SteleAPI implements DeployedSteleAPI {
   private constructor(
-    public readonly deployedContract: DeployedBBoardContract,
-    providers: BBoardProviders,
+    public readonly deployedContract: DeployedSteleContract,
+    private readonly providers: SteleProviders,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
     providers.privateStateProvider.setContractAddress(this.deployedContractAddress);
+
     this.state$ = combineLatest(
       [
-        // Combine public (ledger) state with...
-        providers.publicDataProvider.contractStateObservable(this.deployedContractAddress, { type: 'latest' }).pipe(
-          map((contractState) => BBoard.ledger(contractState.data)),
-          tap((ledgerState) =>
-            logger?.trace({
-              ledgerStateChanged: {
-                ledgerState: {
-                  ...ledgerState,
-                  state: ledgerState.state === BBoard.State.OCCUPIED ? 'occupied' : 'vacant',
-                  owner: toHex(ledgerState.owner),
-                },
-              },
-            }),
-          ),
-        ),
-        // ...private state...
-        //    since the private state of the bulletin board application never changes, we can query the
-        //    private state once and always use the same value with `combineLatest`. In applications
-        //    where the private state is expected to change, we would need to make this an `Observable`.
-        from(providers.privateStateProvider.get(bboardPrivateStateKey) as Promise<BBoardPrivateState>),
+        providers.publicDataProvider
+          .contractStateObservable(this.deployedContractAddress, { type: 'latest' })
+          .pipe(map((contractState) => Stele.ledger(contractState.data))),
+        from(providers.privateStateProvider.get(stelePrivateStateKey) as Promise<StelePrivateState>),
       ],
-      // ...and combine them to produce the required derived state.
-      (ledgerState, privateState) => {
-        const hashedSecretKey = BBoard.pureCircuits.publicKey(
-          privateState.secretKey,
-          convertFieldToBytes(32, ledgerState.sequence, 'api/src/index.ts'),
-        );
+      (ledgerState, privateState): SteleDerivedState => {
+        const commitment = Stele.pureCircuits.commitmentOf(privateState.secretKey);
+        const nullifier = Stele.pureCircuits.nullifierOf(privateState.secretKey, roundToBytes(ledgerState.roundNumber));
+
+        const tally: bigint[] = [];
+        for (let option = 0n; option < ledgerState.optionCount; option++) {
+          tally.push(ledgerState.tally.member(option) ? ledgerState.tally.lookup(option).read() : 0n);
+        }
 
         return {
-          state: ledgerState.state,
-          message: ledgerState.message.value,
-          sequence: ledgerState.sequence,
-          isOwner: toHex(ledgerState.owner) === toHex(hashedSecretKey),
+          phase: ledgerState.phase,
+          roundNumber: ledgerState.roundNumber,
+          questionHash: ledgerState.questionHash,
+          optionCount: ledgerState.optionCount,
+          promiseHash: ledgerState.promiseHash,
+          promiseThreshold: ledgerState.promiseThreshold,
+          minParticipants: ledgerState.minParticipants,
+          eligibleCount: ledgerState.eligibleCount,
+          participantCount: ledgerState.participantCount,
+          tally,
+          isRegistered: ledgerState.eligibility.findPathForLeaf(commitment) !== undefined,
+          hasParticipated: ledgerState.nullifiers.member(nullifier),
+          isOperator: toHex(ledgerState.operatorId) === toHex(Stele.pureCircuits.operatorIdOf(privateState.secretKey)),
         };
       },
     );
   }
 
-  /**
-   * Gets the address of the current deployed contract.
-   */
   readonly deployedContractAddress: ContractAddress;
+  readonly state$: Observable<SteleDerivedState>;
 
   /**
-   * Gets an observable stream of state changes based on the current public (ledger),
-   * and private state data.
-   */
-  readonly state$: Observable<BBoardDerivedState>;
-
-  /**
-   * Attempts to post a given message to the bulletin board.
+   * Adds this device's commitment to the eligibility tree.
    *
-   * @param message The message to post.
-   *
-   * @remarks
-   * This method can fail during local circuit execution if the bulletin board is currently occupied.
+   * Only the commitment travels; the secret behind it stays here. Whoever
+   * knows a secret can precompute its tags, which is why the operator must
+   * never be the one to issue it.
    */
-  async post(message: string): Promise<void> {
-    this.logger?.info(`postingMessage: ${message}`);
+  async register(): Promise<void> {
+    const privateState = (await this.providers.privateStateProvider.get(stelePrivateStateKey)) as
+      | StelePrivateState
+      | undefined;
 
-    const txData = await this.deployedContract.callTx.post(message);
+    if (!privateState) {
+      throw new Error('No private state found for this round');
+    }
+
+    const commitment = Stele.pureCircuits.commitmentOf(privateState.secretKey);
+    const txData = await this.deployedContract.callTx.register(commitment);
 
     this.logger?.trace({
-      transactionAdded: {
-        circuit: 'post',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
+      transactionAdded: { circuit: 'register', txHash: txData.public.txHash },
     });
   }
 
-  /**
-   * Attempts to take down any currently posted message on the bulletin board.
-   *
-   * @remarks
-   * This method can fail during local circuit execution if the bulletin board is currently vacant,
-   * or if the currently posted message isn't owned by the owner computed from the current private
-   * state.
-   */
-  async takeDown(): Promise<void> {
-    this.logger?.info('takingDownMessage');
-
-    const txData = await this.deployedContract.callTx.takeDown();
+  /** Close registration and open voting. The eligibility root freezes here. */
+  async openVoting(): Promise<void> {
+    const txData = await this.deployedContract.callTx.openVoting();
 
     this.logger?.trace({
-      transactionAdded: {
-        circuit: 'takeDown',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
+      transactionAdded: { circuit: 'openVoting', txHash: txData.public.txHash },
     });
   }
 
   /**
-   * Deploys a new bulletin board contract to the network.
+   * Answer the round's question.
    *
-   * @param providers The bulletin board providers.
-   * @param logger An optional 'pino' logger to use for logging.
-   * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the newly deployed
-   * {@link DeployedBBoardContract}; or rejects with a deployment error.
+   * Fails locally if this device is not in the eligibility tree, if its tag
+   * for this round has already been spent, or if the choice is out of range.
    */
-  static async deploy(providers: BBoardProviders, logger?: Logger): Promise<BBoardAPI> {
-    logger?.info('deployContract');
+  async participate(choice: bigint): Promise<void> {
+    const txData = await this.deployedContract.callTx.participate(choice);
 
-    const deployedBBoardContract = await deployContract(providers, {
-      compiledContract: CompiledBBoardContractContract,
-      privateStateId: bboardPrivateStateKey,
-      initialPrivateState: createBBoardPrivateState(utils.randomBytes(32)),
+    this.logger?.trace({
+      transactionAdded: { circuit: 'participate', txHash: txData.public.txHash },
     });
+  }
 
-    logger?.trace({
-      contractDeployed: {
-        finalizedDeployTxData: deployedBBoardContract.deployTxData.public,
-      },
+  /** Close the round. Refused while participation is below the floor. */
+  async closeRound(): Promise<void> {
+    const txData = await this.deployedContract.callTx.closeRound();
+
+    this.logger?.trace({
+      transactionAdded: { circuit: 'closeRound', txHash: txData.public.txHash },
     });
-
-    return new BBoardAPI(deployedBBoardContract, providers, logger);
   }
 
   /**
-   * Finds an already deployed bulletin board contract on the network, and joins it.
+   * Opens a new round.
    *
-   * @param providers The bulletin board providers.
-   * @param contractAddress The contract address of the deployed bulletin board contract to search for and join.
-   * @param logger An optional 'pino' logger to use for logging.
-   * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the joined
-   * {@link DeployedBBoardContract}; or rejects with an error.
+   * The five commitments are constructor arguments, so they are fixed by the
+   * deployment transaction itself and cannot be edited afterwards.
    */
-  static async join(providers: BBoardProviders, contractAddress: ContractAddress, logger?: Logger): Promise<BBoardAPI> {
-    logger?.info({
-      joinContract: {
-        contractAddress,
-      },
+  static async deploy(
+    providers: SteleProviders,
+    params: RoundParams,
+    secretKey?: Uint8Array,
+    logger?: Logger,
+  ): Promise<SteleAPI> {
+    logger?.info({ deployRound: { round: params.round.toString() } });
+
+    const deployed = await deployContract(providers, {
+      compiledContract: CompiledStele,
+      privateStateId: stelePrivateStateKey,
+      initialPrivateState: createStelePrivateState(secretKey ?? utils.randomBytes(32)),
+      args: [
+        params.round,
+        params.questionHash,
+        params.optionCount,
+        params.promiseHash,
+        params.promiseThreshold,
+        params.minParticipants,
+        params.operatorId,
+      ],
     });
 
-    const deployedBBoardContract = await findDeployedContract<BBoardContract>(providers, {
+    logger?.trace({ roundDeployed: { finalizedDeployTxData: deployed.deployTxData.public } });
+
+    return new SteleAPI(deployed, providers, logger);
+  }
+
+  /**
+   * Joins a round that is already on the network.
+   *
+   * A participant generates their own secret here; it is created locally on
+   * first join and reused from the private state provider afterwards.
+   */
+  static async join(providers: SteleProviders, contractAddress: ContractAddress, logger?: Logger): Promise<SteleAPI> {
+    logger?.info({ joinRound: { contractAddress } });
+
+    const deployed = await findDeployedContract<SteleContract>(providers, {
       contractAddress,
-      compiledContract: CompiledBBoardContractContract,
-      privateStateId: bboardPrivateStateKey,
-      initialPrivateState: await BBoardAPI.getPrivateState(providers, contractAddress),
+      compiledContract: CompiledStele,
+      privateStateId: stelePrivateStateKey,
+      initialPrivateState: await SteleAPI.getPrivateState(providers),
     });
 
-    logger?.trace({
-      contractJoined: {
-        finalizedDeployTxData: deployedBBoardContract.deployTxData.public,
-      },
-    });
+    logger?.trace({ roundJoined: { finalizedDeployTxData: deployed.deployTxData.public } });
 
-    return new BBoardAPI(deployedBBoardContract, providers, logger);
+    return new SteleAPI(deployed, providers, logger);
   }
 
-  private static async getPrivateState(
-    providers: BBoardProviders,
-    contractAddress: ContractAddress,
-  ): Promise<BBoardPrivateState> {
-    providers.privateStateProvider.setContractAddress(contractAddress);
-    const existingPrivateState = await providers.privateStateProvider.get(bboardPrivateStateKey);
-    return existingPrivateState ?? createBBoardPrivateState(utils.randomBytes(32));
+  private static async getPrivateState(providers: SteleProviders): Promise<StelePrivateState> {
+    const existing = (await providers.privateStateProvider.get(stelePrivateStateKey)) as StelePrivateState | undefined;
+
+    if (existing) {
+      return existing;
+    }
+
+    const created = createStelePrivateState(utils.randomBytes(32));
+    await providers.privateStateProvider.set(stelePrivateStateKey, created);
+    return created;
   }
 }
 
-/**
- * A namespace that represents the exports from the `'utils'` sub-package.
- *
- * @public
- */
-export * as utils from './utils/index.js';
-
 export * from './common-types.js';
+export * as utils from './utils/index.js';

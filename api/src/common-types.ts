@@ -1,99 +1,121 @@
-// This file is part of midnightntwrk/example-bboard.
-// Copyright (C) Midnight Foundation
+// STELE - shared types for the API, CLI and UI
 // SPDX-License-Identifier: Apache-2.0
-// Licensed under the Apache License, Version 2.0 (the "License");
-// You may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 /**
- * Bulletin board common types and abstractions.
+ * Types and abstractions shared across the Stele clients.
  *
  * @module
  */
 
 import { type MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
 import { type FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import type { State, BBoardPrivateState, Contract, Witnesses } from '../../contract/src/index';
+import type { Phase, StelePrivateState, Contract, Witnesses } from '../../contract/src/index';
 
-export const bboardPrivateStateKey = 'bboardPrivateState';
-export type PrivateStateId = typeof bboardPrivateStateKey;
+export const stelePrivateStateKey = 'stelePrivateState';
+export type PrivateStateId = typeof stelePrivateStateKey;
 
 /**
  * The private states consumed throughout the application.
  *
- * @remarks
- * {@link PrivateStates} can be thought of as a type that describes a schema for all
- * private states for all contracts used in the application. Each key represents
- * the type of private state consumed by a particular type of contract.
- * The key is used by the deployed contract when interacting with a private state provider,
- * and the type (i.e., `typeof PrivateStates[K]`) represents the type of private state
- * expected to be returned.
- *
- * Since there is only one contract type for the bulletin board example, we only define a
- * single key/type in the schema.
+ * There is one contract type in Stele, so the schema has a single key. The
+ * value behind it never leaves the device: it holds the eligibility secret.
  *
  * @public
  */
 export type PrivateStates = {
-  /**
-   * Key used to provide the private state for {@link BBoardContract} deployments.
-   */
-  readonly bboardPrivateState: BBoardPrivateState;
+  readonly stelePrivateState: StelePrivateState;
 };
 
 /**
- * Represents a bulletin board contract and its private state.
+ * A Stele round contract together with its private state.
  *
  * @public
  */
-export type BBoardContract = Contract<BBoardPrivateState, Witnesses<BBoardPrivateState>>;
+export type SteleContract = Contract<StelePrivateState, Witnesses<StelePrivateState>>;
 
 /**
- * The keys of the circuits exported from {@link BBoardContract}.
+ * The circuits exported by {@link SteleContract}.
  *
  * @public
  */
-export type BBoardCircuitKeys = Exclude<keyof BBoardContract['impureCircuits'], number | symbol>;
+export type SteleCircuitKeys = Exclude<keyof SteleContract['impureCircuits'], number | symbol>;
 
 /**
- * The providers required by {@link BBoardContract}.
+ * The providers required by {@link SteleContract}.
  *
  * @public
  */
-export type BBoardProviders = MidnightProviders<BBoardCircuitKeys, PrivateStateId, BBoardPrivateState>;
+export type SteleProviders = MidnightProviders<SteleCircuitKeys, PrivateStateId, StelePrivateState>;
 
 /**
- * A {@link BBoardContract} that has been deployed to the network.
+ * A {@link SteleContract} that has been deployed to the network.
  *
  * @public
  */
-export type DeployedBBoardContract = FoundContract<BBoardContract>;
+export type DeployedSteleContract = FoundContract<SteleContract>;
 
 /**
- * A type that represents the derived combination of public (or ledger), and private state.
+ * The five commitments a round is opened with.
+ *
+ * These are written once, at construction, and cannot be changed afterwards:
+ * the question, who may answer, where it sits in the registry, what the
+ * operator promises to do about the outcome, and the anonymity floor.
+ *
+ * @public
  */
-export type BBoardDerivedState = {
-  readonly state: State;
-  readonly sequence: bigint;
-  readonly message: string | undefined;
+export type RoundParams = {
+  readonly round: bigint;
+  readonly questionHash: Uint8Array;
+  readonly optionCount: bigint;
+  readonly promiseHash: Uint8Array;
+  readonly promiseThreshold: bigint;
+  readonly minParticipants: bigint;
+  readonly operatorId: Uint8Array;
+};
+
+/**
+ * Public state of a round, combined with what the local device can tell about
+ * its own position in it.
+ *
+ * Everything here is either already public on the ledger or derived locally.
+ * Nothing in this shape can identify another participant.
+ *
+ * @public
+ */
+export type SteleDerivedState = {
+  readonly phase: Phase;
+  readonly roundNumber: bigint;
+  readonly questionHash: Uint8Array;
+  readonly optionCount: bigint;
+  readonly promiseHash: Uint8Array;
+  readonly promiseThreshold: bigint;
+  readonly minParticipants: bigint;
+
+  /** How many commitments are in the eligibility tree. */
+  readonly eligibleCount: bigint;
+
+  /** How many answers have been recorded. */
+  readonly participantCount: bigint;
+
+  /** Votes per option, indexed by option number. */
+  readonly tally: readonly bigint[];
 
   /**
-   * A readonly flag that determines if the current message was posted by the current user.
+   * Whether this device's commitment is in the eligibility tree.
    *
-   * @remarks
-   * The `owner` property of the public (or ledger) state is the public key of the message owner, while
-   * the `secretKey` property of {@link BBoardPrivateState} is the secret key of the current user. If
-   * `owner` corresponds to the public key derived from `secretKey`, then `isOwner` is `true`.
+   * Derived locally by looking up our own commitment; it says nothing about
+   * anyone else.
    */
-  readonly isOwner: boolean;
-};
+  readonly isRegistered: boolean;
 
-// TODO: for some reason I needed to include "@midnight-ntwrk/wallet-sdk-address-format": "1.0.0-rc.1", should we bump in to rc-2 ?
+  /**
+   * Whether this device's tag for this round has already been spent.
+   *
+   * The tag is public, so this is a local lookup rather than a disclosure.
+   * It answers "have I answered yet", never "who else has".
+   */
+  readonly hasParticipated: boolean;
+
+  /** Whether this device holds the operator secret for this round. */
+  readonly isOperator: boolean;
+};
