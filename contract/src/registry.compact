@@ -1,0 +1,66 @@
+// STELE REGISTRY - the index of rounds
+//
+// The chain cannot be searched for "every contract of this kind": the indexer
+// answers questions about an address you already know. Without a fixed place
+// that lists them, a verifier cannot scan for a round it was never told about,
+// and "the institution cannot bury a round" would rest on nothing.
+//
+// So rounds are recorded here, in one permanent append-only contract, and the
+// rule that gives the claim its force is simple: only rounds in this registry
+// count. Burying a round then means never recording it - which does not hide
+// it, it makes it unofficial.
+//
+// SPDX-License-Identifier: Apache-2.0
+
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// The custodian of this registry, fixed at construction.
+export sealed ledger custodianId: Bytes<32>;
+
+// Round number -> the address of that round's contract.
+// There is no circuit that removes or rewrites an entry.
+export ledger rounds: Map<Uint<64>, Bytes<32>>;
+
+// How many rounds have been recorded.
+export ledger roundCount: Counter;
+
+// The largest round number recorded so far.
+//
+// Together with roundCount this makes a skipped round visible without any
+// searching: if the highest number is 7 while only 5 rounds are recorded, two
+// numbers in the sequence were never filled.
+export ledger highestRound: Uint<64>;
+
+witness localSecret(): Bytes<32>;
+
+// custodian identity = H("stele:reg:", secret)
+export circuit custodianIdOf(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:reg:"), secret]);
+}
+
+constructor(custodian: Bytes<32>) {
+  custodianId = disclose(custodian);
+  highestRound = 0;
+}
+
+// Record a round. A number can be claimed once and never reassigned, so the
+// registry cannot be rewritten to make an inconvenient round disappear.
+export circuit recordRound(roundNumber: Uint<64>, roundAddress: Bytes<32>): [] {
+  assert(custodianId == custodianIdOf(localSecret()), "Only the custodian can record a round");
+
+  // A registry entry is public by definition, so the number is disclosed once
+  // and then used as an ordinary value. Comparing it against the ledger would
+  // otherwise leak through the branch, and the compiler refuses that.
+  const number = disclose(roundNumber);
+
+  assert(!rounds.member(number), "This round number is already recorded");
+
+  rounds.insert(number, disclose(roundAddress));
+  roundCount.increment(1);
+
+  if (number > highestRound) {
+    highestRound = number;
+  }
+}
