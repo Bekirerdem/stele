@@ -1,0 +1,197 @@
+// STELE — hesap verebilirlik sicili
+// Bir kurum; sorusunu, kime sorduğunu, ne zaman kapatacağını ve sonuca ne
+// yapacağını geri alamayacak biçimde kaydeder. Cevap verenler görünmez kalır;
+// sayım ve verilen söz herkesçe doğrulanabilir.
+//
+// SPDX-License-Identifier: Apache-2.0
+
+pragma language_version 0.23;
+
+import CompactStandardLibrary;
+
+// ---------------------------------------------------------------------------
+// Faz makinesi
+//
+// REGISTRATION: uygunluk ağacı büyür, oy kabul edilmez.
+// VOTING:       ağaç DONAR, yalnız katılım kabul edilir.
+// CLOSED:       sayım kesinleşir.
+//
+// Kökün donması üç şeyi birden çözer: (a) kanıt üretilirken kökün değişip
+// işlemi geçersiz kılması, (b) tur ortasında hayalet katılımcı eklenmesi,
+// (c) aynı soruyu farklı kümelerle açıp farktan tek kişiyi izole etme.
+// ---------------------------------------------------------------------------
+export enum Phase {
+  REGISTRATION,
+  VOTING,
+  CLOSED
+}
+
+// ---------------------------------------------------------------------------
+// Turun değişmez taahhütleri — yalnız constructor'da yazılır (sealed).
+// Bir tur açıldıktan sonra sorusu, kime sorulduğu ve verilen söz değiştirilemez.
+// ---------------------------------------------------------------------------
+
+// Sicildeki sıra numarası. Numara boşluğu = duyurulmamış tur.
+export sealed ledger roundNumber: Uint<64>;
+
+// Soru metni + seçenek etiketlerinin kanonik hash'i.
+// Zincirde soru durmazsa "sayaç[2]=47" hiçbir şey ifade etmez ve kurum
+// sonradan soruyu değiştirip aynı sayımı başka bir soruya aitmiş gibi sunabilir.
+export sealed ledger questionHash: Bytes<32>;
+
+// Geçerli cevap aralığı: 0 .. optionCount-1
+export sealed ledger optionCount: Uint<8>;
+
+// TAAHHÜT KATMANI — ürünün kalbi.
+// Kurum yalnız soruyu değil, sonuca dair sözünü de kazır:
+// "şu eşiğin altında çıkarsa şunu yapacağım".
+export sealed ledger promiseHash: Bytes<32>;
+export sealed ledger promiseThreshold: Uint<8>;
+
+// k-anonimlik eşiği: bu sayının altında katılım olan tur geçerli sayılmaz.
+// Küçük gruplarda sayaç hareketi kişiye kadar izlenebildiği için bu bir
+// ürün ayarı değil, devre kuralıdır.
+export sealed ledger minParticipants: Uint<16>;
+
+// Operatörün taahhüt kimliği. Faz geçişlerini yalnız bu kimlik yapabilir.
+export sealed ledger operatorId: Bytes<32>;
+
+// ---------------------------------------------------------------------------
+// Değişen durum
+// ---------------------------------------------------------------------------
+
+export ledger phase: Phase;
+
+// Uygunluk ağacı. HistoricMerkleTree çünkü checkRoot GEÇMİŞ kökleri de kabul
+// eder: kayıt sırasında erken kaydolan birinin ürettiği yol, ağaç sonradan
+// büyüse bile geçerli kalır.
+export ledger eligibility: HistoricMerkleTree<16, Bytes<32>>;
+
+// Kaç kişi kaydoldu (public — hayalet katılımcı iddiasının sosyal denetimi).
+export ledger eligibleCount: Counter;
+
+// Kullanılmış tekillik damgaları. Nullifier zaten public olması gereken bir
+// değer olduğu için burada Set kullanmak güvenlidir.
+// (Üyelik kanıtında Set KULLANILAMAZ — hangi elemanın test edildiğini sızdırır.)
+export ledger nullifiers: Set<Bytes<32>>;
+
+// Seçenek başına sayaç.
+export ledger tally: Map<Uint<8>, Counter>;
+
+// Toplam katılım.
+export ledger participantCount: Counter;
+
+// ---------------------------------------------------------------------------
+// Witness — yalnız katılımcının kendi cihazında bulunur, zincire hiç düşmez.
+// ---------------------------------------------------------------------------
+
+// Uygunluk sırrı. Katılımcının cihazında üretilir; kuruma yalnız commitment
+// (H(sır)) verilir. Kurum sırrı görürse nullifier'ları önceden hesaplayıp
+// damga listesini isim listesine çevirebilirdi.
+witness localSecret(): Bytes<32>;
+
+// Commitment'ın ağaçtaki üyelik yolu.
+witness eligibilityPath(cm: Bytes<32>): MerkleTreePath<16, Bytes<32>>;
+
+// ---------------------------------------------------------------------------
+// Türetmeler — domain ayrımı zorunlu
+// ---------------------------------------------------------------------------
+
+// commitment = H("stele:cm:", sır)
+export circuit commitmentOf(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:cm:"), secret]);
+}
+
+// nullifier = H("stele:nul:", turNo, sır)
+// Tur numarası domain ayrımına girer: aynı sır farklı turlarda farklı damga
+// üretir, damgalar turlar arasında birbirine bağlanamaz.
+export circuit nullifierOf(secret: Bytes<32>, round: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "stele:nul:"), round, secret]);
+}
+
+// operatör kimliği = H("stele:op:", sır)
+export circuit operatorIdOf(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:op:"), secret]);
+}
+
+// ---------------------------------------------------------------------------
+// Kurulum
+// ---------------------------------------------------------------------------
+constructor(
+  round: Uint<64>,
+  question: Bytes<32>,
+  options: Uint<8>,
+  promise: Bytes<32>,
+  threshold: Uint<8>,
+  minCount: Uint<16>,
+  operator: Bytes<32>
+) {
+  roundNumber = disclose(round);
+  questionHash = disclose(question);
+  optionCount = disclose(options);
+  promiseHash = disclose(promise);
+  promiseThreshold = disclose(threshold);
+  minParticipants = disclose(minCount);
+  operatorId = disclose(operator);
+  phase = Phase.REGISTRATION;
+}
+
+// ---------------------------------------------------------------------------
+// Devreler
+// ---------------------------------------------------------------------------
+
+// Kayıt. Katılımcı kendi cihazında ürettiği commitment'ı ağaca ekletir.
+// Sır hiçbir zaman buraya gelmez.
+export circuit register(cm: Bytes<32>): [] {
+  assert(phase == Phase.REGISTRATION, "Round is not accepting registrations");
+  eligibility.insert(disclose(cm));
+  eligibleCount.increment(1);
+}
+
+// Kaydı kapat, oylamayı aç. Kök bu noktada donar.
+export circuit openVoting(): [] {
+  assert(phase == Phase.REGISTRATION, "Round is not in registration phase");
+  assert(operatorId == operatorIdOf(localSecret()), "Only the operator can open voting");
+  phase = Phase.VOTING;
+}
+
+// Katılım. Devrenin kanıtladığı:
+//   uygunluk ağacındaki bir commitment'ın sırrını biliyorum
+//   VE bu turda damgam daha önce kullanılmadı
+//   VE cevabım geçerli aralıkta.
+// Kimlik hiçbir aşamada ledger'a düşmez.
+export circuit participate(choice: Uint<8>): [] {
+  assert(phase == Phase.VOTING, "Round is not open for voting");
+  assert(choice < optionCount, "Choice out of range");
+
+  const secret = localSecret();
+  const cm = commitmentOf(secret);
+  const path = eligibilityPath(cm);
+
+  // İKİ koşul birden gerekli. checkRoot tek başına yalnız "bu kök geçerli mi"
+  // sorusunu cevaplar; yaprağın bizim commitment'ımız olduğunu kanıtlamaz.
+  // Eksik bırakılırsa saldırgan geçerli ama alakasız bir yaprakla geçebilir.
+  assert(
+    eligibility.checkRoot(disclose(merkleTreePathRoot<16, Bytes<32>>(path))) && cm == path.leaf,
+    "Not an eligible participant"
+  );
+
+  const nul = nullifierOf(secret, roundNumber as Field as Bytes<32>);
+  assert(!nullifiers.member(disclose(nul)), "Already participated in this round");
+  nullifiers.insert(disclose(nul));
+
+  if (!tally.member(disclose(choice))) {
+    tally.insert(disclose(choice), default<Counter>);
+  }
+  tally.lookup(disclose(choice)).increment(1);
+  participantCount.increment(1);
+}
+
+// Turu kapat. k-eşiğinin altındaki tur kapatılamaz: az katılımlı bir turda
+// sayım kişiye kadar izlenebilir hale gelir.
+export circuit closeRound(): [] {
+  assert(phase == Phase.VOTING, "Round is not open");
+  assert(operatorId == operatorIdOf(localSecret()), "Only the operator can close the round");
+  assert(participantCount >= minParticipants as Uint<64>, "Participation below the anonymity threshold");
+  phase = Phase.CLOSED;
+}
