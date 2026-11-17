@@ -1,0 +1,19 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "stele-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-11-01",
+  // Off on purpose: the relay keeps no request logs, so it holds nothing that
+  // could tie a network address to an answer.
+  "observability": { "enabled": false },
+  // Secret: NEARAI_API_KEY (`wrangler secret put NEARAI_API_KEY`; locally in .dev.vars).
+  // Answer blobs, addressed by <contract address>/<sha256 of the blob>.
+  // Create it once with `wrangler kv namespace create BLOBS` and put the id here.
+  "kv_namespaces": [{ "binding": "BLOBS", "id": "REPLACE_WITH_KV_ID" }],
+  // Limits are per network address, per Cloudflare location, and never stored.
+  "ratelimits": [
+    { "name": "CHAT_LIMIT", "namespace_id": "5101", "simple": { "limit": 20, "period": 60 } },
+    { "name": "BLOB_LIMIT", "namespace_id": "5102", "simple": { "limit": 10, "period": 60 } },
+    { "name": "LOOKUP_LIMIT", "namespace_id": "5103", "simple": { "limit": 120, "period": 60 } }
+  ]
+}
