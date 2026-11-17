@@ -74,3 +74,6 @@ reports/
 relay/node_modules/
 relay/.wrangler/
 relay/.dev.vars
+.wallet-state/
+web/node_modules/
+web/dist/

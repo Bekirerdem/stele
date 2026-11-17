@@ -278,6 +278,14 @@ export async function syncWallet(
 ): Promise<FacadeState> {
   logger.info('Syncing wallet...');
   let emissionCount = 0;
+  // A first sync on preprod runs for hours. Log once a minute instead of on
+  // every emission, and save the wallet's state every few minutes so a run
+  // that dies or times out resumes from there instead of from genesis.
+  let lastLog = 0;
+  let lastSave = Date.now();
+  let saving = false;
+  const progress = (p: unknown) =>
+    JSON.stringify(p, (_k, v: unknown) => (typeof v === 'bigint' ? v.toString() : v));
   const state = await Rx.firstValueFrom(
     wallet.state().pipe(
       Rx.tap((state: FacadeState) => {
@@ -285,17 +293,21 @@ export async function syncWallet(
         const shielded = isProgressStrictlyComplete(state.shielded.progress);
         const unshielded = isProgressStrictlyComplete(state.unshielded.progress);
         const dust = isProgressStrictlyComplete(state.dust.progress);
-        logger.info(
-          `Wallet sync [${emissionCount}]: shielded=${shielded}, unshielded=${unshielded}, dust=${dust}`,
-        );
-        if (!shielded) {
-          logger.debug(`  shielded.progress: ${JSON.stringify(state.shielded.progress)}`);
+        const now = Date.now();
+        if (now - lastLog >= 60_000) {
+          lastLog = now;
+          logger.info(
+            `Wallet sync [${emissionCount}]: shielded=${shielded}, unshielded=${unshielded}, dust=${dust}` +
+              (shielded ? '' : ` | shielded ${progress(state.shielded.progress)}`) +
+              (dust ? '' : ` | dust ${progress(state.dust.progress)}`),
+          );
         }
-        if (!unshielded) {
-          logger.debug(`  unshielded.progress: ${JSON.stringify(state.unshielded.progress)}`);
-        }
-        if (!dust) {
-          logger.debug(`  dust.progress: ${JSON.stringify(state.dust.progress)}`);
+        if (!saving && now - lastSave >= 180_000) {
+          saving = true;
+          lastSave = now;
+          saveWalletState(logger, wallet)
+            .catch((e: unknown) => logger.warn(`Could not save wallet state: ${String(e)}`))
+            .finally(() => { saving = false; });
         }
       }),
       Rx.filter(
@@ -333,7 +345,8 @@ export async function syncWallet(
 // it starts from a new genesis each time. MIDNIGHT_WALLET_STATE=off turns this
 // off.
 
-const STATE_DIR = fileURLToPath(new URL('../../../.wallet-state/', import.meta.url));
+// Repo-root .wallet-state/ (gitignored). This file lives in src/.
+const STATE_DIR = fileURLToPath(new URL('../.wallet-state/', import.meta.url));
 const stateFiles = new WeakMap<WalletFacade, string>();
 
 type SavedWalletState = { version: 1; shielded: string; unshielded: string; dust: string };
