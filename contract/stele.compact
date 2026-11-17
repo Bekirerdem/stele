@@ -1,0 +1,179 @@
+// STELE - one question, asked of a fixed group, answered without fear.
+//
+// The asker opens a question and fixes its rules before anyone answers: who
+// may answer (a Merkle root of member keys), how long answering stays open,
+// who may read the answers, the smallest number of answers that may ever be
+// opened, and the moderation rules. All of it is committed here and cannot be
+// changed afterwards.
+//
+// A member answers by proving, without saying which leaf, that they hold the
+// secret behind one member key. The answer text itself never touches the
+// chain: only a digest of the stored blob does, keyed by a nullifier that is
+// bound to this question and this contract. The nullifier lets a member
+// replace their answer until the deadline (the last one counts), which is
+// also what makes "show me what you wrote" pointless: nobody can prove the
+// answer they show is their last.
+//
+// Removal is possible and always visible: a removed answer stays listed with
+// a reason code, and the count of removals only ever grows.
+//
+// SPDX-License-Identifier: MIT
+
+pragma language_version 0.28;
+
+import CompactStandardLibrary;
+
+export enum Phase { ENROLMENT, OPEN, CLOSED }
+export enum Visibility { PUBLIC, ASKER_ONLY }
+
+// Fixed at construction.
+export sealed ledger askerPk: Bytes<32>;
+export sealed ledger moderatorPk: Bytes<32>;
+export sealed ledger questionId: Bytes<32>;
+// persistentHash of the canonical rules document: question text, visibility,
+// moderation rules and the model that applies them, the threshold, the
+// promise. The document itself is published next to the contract; anyone can
+// hash it and compare.
+export sealed ledger rulesHash: Bytes<32>;
+export sealed ledger visibility: Visibility;
+export sealed ledger minAnswers: Uint<32>;
+
+export ledger phase: Phase;
+export ledger members: MerkleTree<10, Bytes<32>>;
+export ledger memberKeys: Set<Bytes<32>>;
+export ledger enrolled: Counter;
+// X25519 keys the answers are sealed to when visibility is ASKER_ONLY.
+export ledger askerEncKeys: Set<Bytes<32>>;
+export ledger deadline: Uint<64>;
+
+// nullifier -> digest of the latest stored answer blob.
+export ledger answers: Map<Bytes<32>, Bytes<32>>;
+// How many members have answered (each counted once, however often they
+// revise), and how many answer submissions there were in total.
+export ledger answerCount: Counter;
+export ledger submissions: Counter;
+
+// nullifier -> reason code. An entry disappears only when the member submits
+// a corrected answer; removedTotal never goes down.
+export ledger removed: Map<Bytes<32>, Uint<8>>;
+export ledger removedTotal: Counter;
+
+witness secretKey(): Bytes<32>;
+witness memberPath(pk: Bytes<32>): MerkleTreePath<10, Bytes<32>>;
+
+constructor(qid: Bytes<32>, rules: Bytes<32>, vis: Visibility, minimum: Uint<32>, moderator: Bytes<32>) {
+  askerPk = disclose(askerKey(secretKey()));
+  questionId = disclose(qid);
+  rulesHash = disclose(rules);
+  visibility = disclose(vis);
+  const m = disclose(minimum);
+  assert(m >= 3, "The minimum must be at least 3 answers");
+  minAnswers = m;
+  moderatorPk = disclose(moderator);
+  phase = Phase.ENROLMENT;
+}
+
+export pure circuit askerKey(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:asker"), sk]);
+}
+export pure circuit moderatorKey(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:moderator"), sk]);
+}
+export pure circuit memberKey(sk: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "stele:member"), sk]);
+}
+// Bound to the question and to this contract instance, so the same member's
+// answers to two questions (or to a rehearsal and the real one) can't be
+// linked, and it can't be computed from the member key the asker holds.
+export pure circuit answerNullifier(sk: Bytes<32>, qid: Bytes<32>, instance: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([pad(32, "stele:answer"), sk, qid, instance]);
+}
+
+circuit requireAsker(): [] {
+  assert(disclose(askerKey(secretKey())) == askerPk, "Only the asker can do this");
+}
+
+circuit requireModerator(): [] {
+  assert(disclose(moderatorKey(secretKey())) == moderatorPk, "Only the moderator can do this");
+}
+
+export circuit enrol(pk: Bytes<32>): [] {
+  requireAsker();
+  assert(phase == Phase.ENROLMENT, "Enrolment is closed");
+  const k = disclose(pk);
+  assert(!memberKeys.member(k), "Member already enrolled");
+  assert(enrolled.read() < 1024, "Member list is full");
+  memberKeys.insert(k);
+  members.insert(k);
+  enrolled.increment(1);
+}
+
+export circuit addAskerKey(key: Bytes<32>): [] {
+  requireAsker();
+  assert(phase == Phase.ENROLMENT, "Enrolment is closed");
+  const k = disclose(key);
+  assert(k != default<Bytes<32>>, "Not a usable key");
+  assert(!askerEncKeys.member(k), "Key already added");
+  assert(askerEncKeys.size() < 4, "Too many asker keys");
+  askerEncKeys.insert(k);
+}
+
+// Freezes the member list and starts answering. A list smaller than the
+// minimum could never be opened, so it is refused here rather than later.
+export circuit open(d: Uint<64>): [] {
+  requireAsker();
+  assert(phase == Phase.ENROLMENT, "Answering already opened");
+  assert(enrolled.read() >= minAnswers, "Fewer members than the minimum");
+  assert(visibility == Visibility.PUBLIC || !askerEncKeys.isEmpty(), "No asker key to seal answers to");
+  const dl = disclose(d);
+  assert(dl < 1000000000000, "Deadline out of range");
+  assert(blockTimeLt(dl), "Deadline is in the past");
+  deadline = dl;
+  phase = Phase.OPEN;
+}
+
+// One answer, or a replacement for this member's earlier one. `digest` is the
+// hash of the stored blob; the proof shows membership and binds the digest to
+// this member's nullifier without revealing the member.
+export circuit answer(digest: Bytes<32>): [] {
+  assert(phase == Phase.OPEN, "Answering is not open");
+  assert(blockTimeLt(deadline), "Answering is closed");
+  const sk = secretKey();
+  const pk = memberKey(sk);
+  const path = memberPath(pk);
+  assert(disclose(path.leaf == pk), "Path is not for this member");
+  assert(members.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))), "Not a member");
+  const n = disclose(answerNullifier(sk, questionId, kernel.self().bytes));
+  const d = disclose(digest);
+  assert(d != default<Bytes<32>>, "Empty answer");
+  if (!answers.member(n)) {
+    answerCount.increment(1);
+  }
+  answers.insert(n, d);
+  if (removed.member(n)) {
+    removed.remove(n);
+  }
+  submissions.increment(1);
+}
+
+// Anyone may close once the deadline has passed.
+export circuit close(): [] {
+  assert(phase == Phase.OPEN, "Answering is not open");
+  assert(blockTimeGte(deadline), "Answering is still open");
+  phase = Phase.CLOSED;
+}
+
+// Takes an answer down under the committed moderation rules. It stays visible
+// that this happened and why: the entry is kept with its reason code until the
+// member corrects it, and removedTotal only grows.
+export circuit remove(n0: Bytes<32>, reason: Uint<8>): [] {
+  requireModerator();
+  assert(phase != Phase.ENROLMENT, "Nothing to remove yet");
+  const n = disclose(n0);
+  const r = disclose(reason);
+  assert(r != 0, "A reason is required");
+  assert(answers.member(n), "No such answer");
+  assert(!removed.member(n), "Already removed");
+  removed.insert(n, r);
+  removedTotal.increment(1);
+}

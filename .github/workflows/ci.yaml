@@ -2,14 +2,14 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, v2]
   pull_request:
     branches: [main]
 
 permissions: {}
 
 jobs:
-  contract:
+  stele:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -17,13 +17,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
-      # Pinned to the version in the Midnight compatibility matrix. The
-      # compiler and the runtime have to match exactly, so this is not a
-      # floating version.
+      # Pinned: the compiler and the runtime have to match exactly.
       - name: Setup Compact compiler
         uses: midnightntwrk/setup-compact-action@836895c8fffbbea6bd986af2b17e8941ff29d1f8
         with:
-          compact-version: '0.31.1'
+          compact-version: '0.36.1'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -32,31 +30,17 @@ jobs:
         with:
           node-version: '24'
 
-      # npm's optional-dependency handling breaks the install before v11.
-      # See https://github.com/npm/cli/issues/4828
-      - name: Update npm
-        run: npm install -g npm@latest
-
-      # vite-plugin-wasm has not published its vite 7 support yet.
       - name: Install dependencies
-        run: npm ci --legacy-peer-deps
+        run: npm ci
 
-      # Compiles the circuits, type-checks, lints, builds, and runs the
-      # tests - including the privacy invariant that scans the ledger for the
-      # participant's secret. No proof server here: real proof generation is
-      # slow and belongs in a deploy job, not on every push.
-      - name: Contract
-        working-directory: contract
-        run: npm run ci
+      # No proving keys and no network here: the simulator tests run the
+      # compiled contract in memory, including the privacy invariant that scans
+      # the public ledger for every secret and every answer text.
+      - name: Compile (no ZK keys)
+        run: npm run compile:fast
 
-      - name: API
-        working-directory: api
-        run: npm run ci
+      - name: Type check
+        run: npm run typecheck
 
-      - name: CLI
-        working-directory: stele-cli
-        run: npm run ci
-
-      - name: UI
-        working-directory: stele-ui
-        run: npm run ci
+      - name: Simulator tests
+        run: npm run test:sim

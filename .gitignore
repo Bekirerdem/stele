@@ -61,3 +61,16 @@ jspm_packages/
 
 .claude
 .midnight-expert.stele-seed
+
+# Stele v2
+contract/managed/
+.stele/
+.mnkit/
+deployments/local.json
+.env.*
+!.env.*.example
+
+reports/
+relay/node_modules/
+relay/.wrangler/
+relay/.dev.vars
