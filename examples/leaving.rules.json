@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "title": "Ayrılmayı düşünüyor musun?",
+  "prompts": ["Önümüzdeki 6 ayda ayrılmayı düşünüyor musun? Neden?"],
+  "visibility": "asker_only",
+  "minAnswers": 3,
+  "moderation": { "remove": ["insult", "threat", "doxxing", "hate"], "model": "z-ai/glm-5.3-flash", "provider": "near-ai-tee" },
+  "promise": "Sonuçlar ayrılma niyetini %30'un üzerinde gösterirse, 30 gün içinde ekiple açık bir toplantı yapıp somut adımları paylaşacağız."
+}
