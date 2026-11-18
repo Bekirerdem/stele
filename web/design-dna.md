@@ -1,58 +1,67 @@
 # Stele web: design DNA
 
+A short film (one night, told twice) followed by the facts under it.
 Midnight's own visual language (midnight.network, measured Nov 2026), used for
 a product built on it. No Midnight logo or artwork is used.
 
+## STORY
+1. The survey closed: every answer is "I'm fine". One of them was something
+   else before it was sent.
+2. The night: Elif types what she thinks, stops on three fears, deletes it,
+   sends "I'm fine".
+3. Everyone: the wall turns over. Three sourced numbers say the fears are
+   rational.
+4. The morning: the asker sees a wall of "I'm fine". Months pass, people
+   leave, something breaks. "She had said it. Then she deleted it."
+5. Same night, on Stele: each fear is answered in place (shield, membership
+   proof, sealed until the deadline and the minimum).
+6. This time: the answers open without names, the asker acts, March is quiet.
+7. What's real, 8. You: the reader leaves a sentence on the wall.
+
+The hero is the reader/Elif; Stele is the guide. Fiction is labelled; every
+number carries its source; the shield example is a real run.
+
 ## PALETTE (coverage)
-- `#000000` field, 82%: page background, stage interiors
-- `#0b0b0c` / `#111` raised surfaces, 8%: cards, terminal, letter
-- `#ffffff` text, 6%: headings and active content
-- `#9e9e9e` secondary text, 3%: leads, captions
-- `#0000fe` electric blue, ≤1% per screen except one moment: buttons, the "you" card, underlines, the stamp. `#5c6bff` is the same blue lifted for text on black (4.6:1).
-- Hairlines `rgba(255,255,255,.12)` / `.28`.
+- `#000000` field, about 85%
+- `#050506` / `#0b0b0d` raised surfaces: the phone, results, terminal
+- `#ffffff` text; `#9e9e9e` secondary
+- `#0000fe` electric blue: Elif's card, buttons, the shield's marks, and the
+  whole screen while we are inside her card. `#6f7cff` is the same blue lifted
+  for small text on black (5.5:1).
+- Hairlines `rgba(255,255,255,.12)` / `.28`
 
 ## TYPE
-- Display: Outfit 300, clamp(48px, 8.2vw, 128px), tracking -0.035em, leading 0.95
-- Headline: Outfit 300, clamp(36px, 5.2vw, 80px), tracking -0.03em
-- Body: Outfit 300, 17–21px, `#9e9e9e`
-- Eyebrow / label: DM Mono 400, 12–13px, uppercase, +0.08em, numbered `01`–`08`
-- Ratio display:body ≥ 5×
+Outfit 300 for everything read; DM Mono 400 for labels, the HUD and cards.
+Scale: label 12 · body 18 · caption 22-32 · title 34-56 · beat 36-72 · hero 48-108.
 
-## SPACING
-- Gutter `clamp(16px, 4vw, 64px)`; chapter rail 72px on desktop; 24px column gap
-- Every chapter is one sticky screen on a 12-column grid. Text always cols 1-5,
-  evidence always cols 7-12. The reader's eye never has to look for the title.
-
-## LAYOUTS
-- FIELD: one fixed crowd of answer cards behind the whole page. It is the story,
-  not a background: it changes state in every chapter.
-- HERO: copy bottom-left over a radial veil; centered beats over the field
-- CHAPTER: label · title · body (+ list) left, one glass panel of evidence right
-- RAIL: fixed chapter numbers on the left edge; names on hover
-- STEPPER: five scenes in one panel, one at a time, swap in place
+## LAYOUT
+The stage is fixed and its zones never move:
+- HUD, top left: where and when (mono). Grows while months tick by.
+- TELL, bottom left: her thoughts, then the fear being answered, then the narration.
+- SCREEN, right: what is on a screen in the story (phone, results).
+- BEAT, centre: the few lines the film stops for, and the three numbers.
+- RAIL, left edge: the eight acts.
+Under the film: one ledger grid, label column 240px, content right.
 
 ## MOTION
-- Tokens: LAND `expo.out`, POP `back.out(1.7)`, SHIFT `power4.inOut`, LEAVE `expo.in`. No others.
-- Things arrive, swap in place or stamp; nothing cross-fades on its own.
-- The field runs on ONE timeline scrubbed by the whole page (time = screens
-  scrolled). Panel scenes play on entry and restart on re-entry.
-- Field states: 01 cards turn (said → thought), zoom into you · 02 a group goes
-  quiet under each fear · 03 names under every answer · 04-07 names blur away,
-  slow push-in · 08 the honest crowd returns, nameless.
+Everything is a function of one clock (screens scrolled). No tween holds
+state, so scrubbing back or jumping from the rail lands on the same picture.
+Devices: typing and erasing tied to scroll · the camera diving into one card
+and back · cards turning over · months ticking and rewinding · the blue
+draining from Elif's card · every card trading places · a sealed wall opening.
+Easing: `cubic-bezier(0.16,1,0.3,1)` to land, `cubic-bezier(0.76,0,0.24,1)` to
+shift. Nothing else.
 
 ## THE MOVE
-The hero's single blue card is "you". After the crowd flips to show what people
-actually think, the camera dives into your card until the whole screen is blue
-and asks what you would say.
+The same night is told twice. The first time ends in "She had said it. Then
+she deleted it." The second time the reader loses track of which card is hers.
 
 ## REFUSALS
-No gradient backgrounds as decoration, no emoji as ornament, no icons, no stock
-illustration, no drop shadows except blue glow on blue things, no centered
-section layouts (the two hero beats are the only centered text), no invented
-numbers: every hash, count and answer comes from a real run.
+No gradient decoration, no emoji, no icons, no illustration, no drop shadows
+except blue glow on blue things, no invented numbers, no feature grid.
 
 ## TESTS
-1. Screenshot any section: is there at most one blue element competing for the eye?
-2. Is every number on the page traceable to the CLI output or a cited paper?
-3. Does the page read correctly with motion turned off (prefers-reduced-motion)?
+1. Scroll to any point, reload: is the picture the same?
+2. Is every number traceable to a named source, and is the fiction labelled?
+3. With motion reduced, does the story still read (no zoom, no shuffle)?
 4. At 390px wide, is there horizontal scroll? (must be no)
