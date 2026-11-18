@@ -1,0 +1,15 @@
+{
+  "network": "preview",
+  "networkId": "preview",
+  "contracts": {
+    "stele": {
+      "address": "1b35a531155277561259cfe44cbaa30f2e5f5e433aa50bc193002bd3aea4b09f",
+      "txId": "00631cb2290390afa679d36e905cdefe6e90daeaa239465fd8723c961d25bbf12c",
+      "txHash": "ed7c8594c84d63981cb440eb3b8691c0787ed128f397da9b30e1fa8a100e0ed2",
+      "blockHeight": 165595,
+      "blockHash": "0daf463c6ac9f39af2b222a227cd471e6187a10394267c083aec5ddae60eadf3",
+      "deployer": "mn_addr_preview1c6qkxyzg5a59yg6ehnqdhmvwpgp4swgdpw2qqpugrlaqyewyvnasaepqer",
+      "deployedAt": "2026-11-18T13:43:51.437Z"
+    }
+  }
+}

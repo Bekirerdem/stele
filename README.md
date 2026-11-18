@@ -101,4 +101,22 @@ STELE_KEYS_DIR=.stele/asker npm run stele -- read
 
 v0.2 — contract, simulator tests, CLI, shield and relay. Web app next.
 
+### Live on Midnight Preview
+
+| | |
+|---|---|
+| Contract | `1b35a531155277561259cfe44cbaa30f2e5f5e433aa50bc193002bd3aea4b09f` |
+| Deployed | block 165595, 18 Nov 2026 (tx hash `ed7c8594c84d63981cb440eb3b8691c0787ed128f397da9b30e1fa8a100e0ed2`) |
+| Rules | [`examples/leaving.rules.json`](examples/leaving.rules.json), hash `c617d161a7d1334f6cdda1ebb320ca2d034c2100b6a502236b401bf8126b148c` |
+
+One full round ran against it with real proofs: 3 members enrolled, the question opened, 3 answers (two through the shield, one deliberately rude and unshielded), reading refused before the close, the close, the moderator's removal of the rude one (still listed as `removed: insult`), and the mirror reporting consistent.
+
+Anyone can read its public state:
+
+```bash
+MIDNIGHT_NETWORK=preview npm run stele -- status
+```
+
+The answer blobs of that round are in a local store, not on a public relay, so `verify` run elsewhere will report them missing.
+
 MIT licensed. Network helpers in `src/` are adapted from [midnightntwrk/midnight-examples](https://github.com/midnightntwrk/midnight-examples) (Apache-2.0).
