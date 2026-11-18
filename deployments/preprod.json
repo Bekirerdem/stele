@@ -1,0 +1,15 @@
+{
+  "network": "preprod",
+  "networkId": "preprod",
+  "contracts": {
+    "stele": {
+      "address": "ce3c78c4dc06d1dc55509db8a2aaa3206792eb9701ca58e0153417024060023d",
+      "txId": "0083accbb73b42b1f0ceab8015940b65d5122638d3d6cb6ee91fc4ad4856106ea3",
+      "txHash": "f0c7f75dd239cf10e2a0d91dcc976d3ede6b6a696426dd723b7067b336d0d1de",
+      "blockHeight": 3474360,
+      "blockHash": "ec87aa1e50822090f16379282f0bdd474451fbf84628ce5a444d23382102f7d8",
+      "deployer": "mn_addr_preprod1c6qkxyzg5a59yg6ehnqdhmvwpgp4swgdpw2qqpugrlaqyewyvnasacls27",
+      "deployedAt": "2026-11-18T16:28:15.365Z"
+    }
+  }
+}

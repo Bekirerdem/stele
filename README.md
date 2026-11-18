@@ -101,22 +101,27 @@ STELE_KEYS_DIR=.stele/asker npm run stele -- read
 
 v0.2 — contract, simulator tests, CLI, shield and relay. Web app next.
 
-### Live on Midnight Preview
+### Live on Midnight Preprod and Preview
 
-| | |
-|---|---|
-| Contract | `1b35a531155277561259cfe44cbaa30f2e5f5e433aa50bc193002bd3aea4b09f` |
-| Deployed | block 165595, 18 Nov 2026 (tx hash `ed7c8594c84d63981cb440eb3b8691c0787ed128f397da9b30e1fa8a100e0ed2`) |
-| Rules | [`examples/leaving.rules.json`](examples/leaving.rules.json), hash `c617d161a7d1334f6cdda1ebb320ca2d034c2100b6a502236b401bf8126b148c` |
+| | Preprod | Preview |
+|---|---|---|
+| Contract | `ce3c78c4dc06d1dc55509db8a2aaa3206792eb9701ca58e0153417024060023d` | `1b35a531155277561259cfe44cbaa30f2e5f5e433aa50bc193002bd3aea4b09f` |
+| Deployed | block 3474360, 18 Nov 2026 | block 165595, 18 Nov 2026 |
+| Deploy tx hash | `f0c7f75dd239cf10e2a0d91dcc976d3ede6b6a696426dd723b7067b336d0d1de` | `ed7c8594c84d63981cb440eb3b8691c0787ed128f397da9b30e1fa8a100e0ed2` |
 
-One full round ran against it with real proofs: 3 members enrolled, the question opened, 3 answers (two through the shield, one deliberately rude and unshielded), reading refused before the close, the close, the moderator's removal of the rude one (still listed as `removed: insult`), and the mirror reporting consistent.
+Both use the same rules: [`examples/leaving.rules.json`](examples/leaving.rules.json), hash `c617d161a7d1334f6cdda1ebb320ca2d034c2100b6a502236b401bf8126b148c`.
 
-Anyone can read its public state:
+One full round ran on each network with real proofs: 3 members enrolled, the question opened, 3 answers (two through the shield, one deliberately rude and unshielded), reading refused before the close, the close, the moderator's removal of the rude one (still listed as `removed: insult`), and the mirror reporting consistent.
+
+Anyone can read the public state:
 
 ```bash
 MIDNIGHT_NETWORK=preview npm run stele -- status
+MIDNIGHT_NETWORK=preprod BLOCKFROST_PROJECT_ID=<yours> npm run stele -- status
 ```
 
-The answer blobs of that round are in a local store, not on a public relay, so `verify` run elsewhere will report them missing.
+Preprod is reached through Blockfrost, so it needs a (free) project id; Preview has public endpoints.
+
+The answer blobs of those rounds are in a local store, not on a public relay, so `verify` run elsewhere will report them missing.
 
 MIT licensed. Network helpers in `src/` are adapted from [midnightntwrk/midnight-examples](https://github.com/midnightntwrk/midnight-examples) (Apache-2.0).
