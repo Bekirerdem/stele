@@ -19,20 +19,26 @@ a product built on it. No Midnight logo or artwork is used.
 - Ratio display:body ≥ 5×
 
 ## SPACING
-- Section rhythm `clamp(96px, 16vh, 180px)`; gutter `clamp(16px, 4vw, 64px)`; max width 1360px
-- Asymmetric grids only: 5/4, 6/5, 4/7. No equal three-up cards.
+- Gutter `clamp(16px, 4vw, 64px)`; chapter rail 72px on desktop; 24px column gap
+- Every chapter is one sticky screen on a 12-column grid. Text always cols 1-5,
+  evidence always cols 7-12. The reader's eye never has to look for the title.
 
 ## LAYOUTS
-- HERO: full-bleed crowd of answer cards, copy bottom-left over a radial veil (≥ 100vh, pinned)
-- LEDGER ROWS: label · statement · quote, hairline separated (cost, limits)
-- STEPPER: pinned rail (5/12) + stage (7/12), one scene at a time, swap in place
-- TABLE: party · sees · never sees
-- TERMINAL: real CLI output, typed once
+- FIELD: one fixed crowd of answer cards behind the whole page. It is the story,
+  not a background: it changes state in every chapter.
+- HERO: copy bottom-left over a radial veil; centered beats over the field
+- CHAPTER: label · title · body (+ list) left, one glass panel of evidence right
+- RAIL: fixed chapter numbers on the left edge; names on hover
+- STEPPER: five scenes in one panel, one at a time, swap in place
 
 ## MOTION
 - Tokens: LAND `expo.out`, POP `back.out(1.7)`, SHIFT `power4.inOut`, LEAVE `expo.in`. No others.
 - Things arrive, swap in place or stamp; nothing cross-fades on its own.
-- Scroll scrubs the hero; scenes in the stepper play on entry and restart on re-entry.
+- The field runs on ONE timeline scrubbed by the whole page (time = screens
+  scrolled). Panel scenes play on entry and restart on re-entry.
+- Field states: 01 cards turn (said → thought), zoom into you · 02 a group goes
+  quiet under each fear · 03 names under every answer · 04-07 names blur away,
+  slow push-in · 08 the honest crowd returns, nameless.
 
 ## THE MOVE
 The hero's single blue card is "you". After the crowd flips to show what people
