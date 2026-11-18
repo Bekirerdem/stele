@@ -5,8 +5,10 @@
 //   STELE_RELAY_URL set   -> the Stele relay (relay/), over HTTP
 //   otherwise             -> a local directory, .stele/blobs/<network>/<address>/
 //
-// The relay serves blobs only after a question closes with at least its
-// minimum number of answers; a local store is for a single-machine dry run.
+// Neither store holds anything back: a blob can be fetched as soon as it is
+// stored. Today the "not before close, not below the minimum" rule is applied
+// by the reading client only (see README, Honest limits). A local store is
+// for a single-machine dry run.
 //
 // SPDX-License-Identifier: MIT
 

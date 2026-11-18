@@ -431,7 +431,9 @@ const commands: Record<string, () => Promise<void>> = {
     let present = 0;
     for (const [, d] of l.answers) if (await store.get(address, toHex(d))) present++;
     const all = BigInt(present) === l.answers.size();
-    console.log(`${all ? '✔' : '!'} ${present} of ${l.answers.size()} answer blobs found at ${store.where}, each matching its on-chain digest`);
+    // A missing blob is an answer whose text is gone: never "consistent".
+    ok &&= all;
+    console.log(`${all ? '✔' : '✖'} ${present} of ${l.answers.size()} answer blobs found at ${store.where}, each matching its on-chain digest`);
     console.log(`✔ ${l.answerCount} members answered; ${l.removedTotal} removals ever, ${l.removed.size()} still marked`);
     console.log(ok ? 'Mirror: consistent.' : 'Mirror: INCONSISTENT — see above.');
   },

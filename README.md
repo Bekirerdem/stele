@@ -23,7 +23,7 @@ An anonymous answer is usually worthless: anyone could have written it, or one p
 | The rules can't move afterwards | The rules document (questions, visibility, minimum, moderation rules, promise) is hashed into the contract at deployment |
 | Nothing is buried silently | Removal is possible, but it stays listed with its reason, and the removal total only grows |
 | No small-group exposure | A minimum number of answers (at least 3) before any is opened |
-| Coercion doesn't pay | A member can replace their answer until the deadline; only the last counts, so "show me what you wrote" proves nothing |
+| Coercion doesn't pay | A member can replace their answer until the deadline; only the last counts, so showing someone a screen proves nothing (handing over the member secret still would) |
 
 ## The answer shield
 
@@ -90,8 +90,12 @@ STELE_KEYS_DIR=.stele/asker npm run stele -- read
 - Pseudonymous and cryptographically protected, not "fully anonymous".
 - The shield helps; it is not a guarantee. The last word, and the responsibility, are the writer's.
 - Transaction timing is public: when a nullifier answered can be seen. Batching through the relay is the planned defence.
-- The minimum-answers rule is enforced by the clients and the relay, not yet by cryptography.
-- Not audited.
+- "Nothing opens before the deadline or below the minimum" is enforced by the reading client only. The asker holds the decryption key and the blob store holds nothing back, so a modified client could read early; with `public` visibility anyone could. Closing this with a time-lock or threshold decryption is the next piece of work. Until then, treat it as a rule of the application, not of the cryptography.
+- Replacing an answer does not erase the earlier version: its digest stays in the chain's history and its blob stays in the store.
+- The asker builds the member list, so "from a real member" holds relative to that list.
+- One member secret is used across questions. Whoever obtains it can find that member's answers.
+- The relay sees the IP address that stores each blob. Use it over Tor or a VPN if that matters.
+- Not audited. An internal review on 18 Nov 2026 found the items above.
 
 ## Status
 
