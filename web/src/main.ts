@@ -50,13 +50,17 @@ function crowd(c: Copy) {
   const cols = isNarrow() ? 6 : 16;
   const rows = isNarrow() ? 9 : 10;
   const you = 5 * cols + (cols - (isNarrow() ? 2 : 5));
+  // Every voice appears once before any repeats, in a different order each
+  // round, so neighbours rarely say the same thing.
+  const pool: Copy['hero']['voices'] = [];
+  for (let seed = 11; pool.length < cols * rows; seed += 12) pool.push(...shuffled(c.hero.voices, seed));
   let cells = '';
   for (let i = 0; i < cols * rows; i++) {
     const isYou = i === you;
-    const pick = (n: number, salt: number) => ((i * 2654435761 + salt * 40503) >>> 7) % n; // spread, no column pattern
-    const thought = isYou ? '' : c.hero.thoughts[pick(c.hero.thoughts.length, 1)]!;
-    const who = isYou ? '' : `<small class="who">${esc(c.anon.names[pick(c.anon.names.length, 2)]!)}</small>`;
-    cells += `<div class="cell${isYou ? ' you' : ''}"><div class="card"><div class="face front">${esc(c.hero.said)}</div><div class="face back"><span>${esc(thought)}</span>${who}</div></div></div>`;
+    const v = pool[i]!;
+    const name = c.anon.names[((i * 2654435761) >>> 9) % c.anon.names.length]!;
+    const back = isYou ? '' : `<em class="sec">${esc(v.s)}</em><span>${esc(v.t)}</span><small class="who">${esc(name)}</small>`;
+    cells += `<div class="cell${isYou ? ' you' : ''}"><div class="card"><div class="face front">${esc(c.hero.said)}</div><div class="face back">${back}</div></div></div>`;
   }
   return `<div class="crowd" style="--cols:${cols}">${cells}</div>`;
 }
@@ -120,12 +124,6 @@ function terminalLines(): { cls: string; text: string }[] {
   ];
 }
 
-function markTells(text: string, tells: string[]) {
-  let out = esc(text);
-  for (const t of tells) out = out.replace(esc(t), `<mark>${esc(t)}</mark>`);
-  return out;
-}
-
 const label = (c: Copy, i: number) => `<div class="eyebrow">0${i + 1}  ${eb(c.chapters[i]!)}</div>`;
 const chapter = (i: number, cls: string, inner: string) =>
   `<section class="chapter ${cls}" id="ch-${i}" style="--len:${LEN[i]}"><div class="sticky">${inner}</div></section>`;
@@ -160,18 +158,24 @@ ${chapter(1, 'ch-cost', `
     <h2 class="title split">${esc(c.cost.title)}</h2>
     <p class="body">${esc(c.cost.body)}</p>
     <ol class="fears">${c.cost.rows.map((r) => `<li><span class="k">${esc(r.k)}</span><span class="line">${esc(r.line)}</span><span class="q">${esc(r.q)}</span></li>`).join('')}</ol>
-    <p class="cost-after">${esc(c.cost.after)}</p>
+  </div>
+  <div class="evidence">
+    <div class="panel stat" id="stat">
+      ${c.cost.rows.map((r) => `<div class="stat-card"><div class="stat-n">${esc(r.n)}</div><p class="stat-d">${esc(r.d)}</p><span class="eyebrow">${esc(r.src)}</span></div>`).join('')}
+    </div>
+    <p class="cost-after">${esc(c.cost.after)} <cite>${esc(c.cost.afterSrc)}</cite></p>
   </div>`)}
 ${chapter(2, 'ch-anon', `
   <div class="text">
     ${label(c, 2)}
     <h2 class="title split">${esc(c.anon.title)}</h2>
-    <ol class="points">${c.anon.points.map((p, i) => `<li><b>0${i + 1}</b><span>${esc(p)}${i === 1 ? `<cite>${esc(c.anon.cite)}</cite>` : ''}</span></li>`).join('')}</ol>
+    <ol class="points">${c.anon.points.map((p, i) => `<li><b>0${i + 1}</b><span>${esc(p.t)}<cite>${esc(p.cite)}</cite></span></li>`).join('')}</ol>
     <p class="fix">${esc(c.anon.fix)}</p>
   </div>
   <div class="evidence"><div class="panel specimen" id="specimen">
-    <div class="lab"><span class="eyebrow" data-lab>${esc(c.anon.beforeLabel)}</span><span class="eyebrow">NEAR AI · TEE</span></div>
-    <div class="txt" data-txt>${markTells(c.anon.before, c.anon.tells)}</div>
+    <div class="lab"><span class="eyebrow">${esc(c.anon.specimen.label)}</span><span class="eyebrow">GLM 5.3 Flash</span></div>
+    <p class="draft" data-txt></p>
+    <div class="sig"><i></i>${esc(c.anon.specimen.receipt)}</div>
   </div></div>`)}
 ${chapter(3, 'ch-how', `
   <div class="text">
@@ -447,18 +451,18 @@ function story(f: Field) {
     .set({}, {}, SPAN);
 
   // Which fear is lit follows the same clock.
+  // Which fear is lit, and which number stands next to it, follow the same clock.
   const rows = gsap.utils.toArray<HTMLElement>('.fears li');
-  ScrollTrigger.create({
-    trigger: '#ch-1',
-    start: 'top bottom',
-    end: 'bottom bottom',
-    onUpdate: () => {
-      const at = window.scrollY / window.innerHeight;
-      let k = -1;
-      for (let i = 0; i < 4; i++) if (at >= fearAt(i) - 0.15) k = i;
-      rows.forEach((r, i) => r.classList.toggle('on', i === k));
-    },
-  });
+  const stats = gsap.utils.toArray<HTMLElement>('.stat-card');
+  const light = () => {
+    const at = window.scrollY / window.innerHeight;
+    let k = -1;
+    for (let i = 0; i < 4; i++) if (at >= fearAt(i) - 0.15) k = i;
+    rows.forEach((r, i) => r.classList.toggle('on', i === k));
+    stats.forEach((s, i) => s.classList.toggle('on', i === k));
+    document.getElementById('stat')?.classList.toggle('live', k >= 0);
+  };
+  ScrollTrigger.create({ trigger: '#ch-1', start: 'top bottom', end: 'bottom bottom', onUpdate: light, onRefresh: light });
 }
 
 // ---------------------------------------------------------------- chapter UI
@@ -504,19 +508,59 @@ function headings() {
   });
 }
 
+/**
+ * The real shield run on a nurse's answer, replayed: the enclave marks what
+ * points to the writer, the writer generalizes the ward and keeps the number,
+ * because the number is the complaint.
+ */
 function specimen(c: Copy) {
+  const sp = c.anon.specimen;
   const box = document.getElementById('specimen')!;
   const txt = box.querySelector<HTMLElement>('[data-txt]')!;
-  const lab = box.querySelector<HTMLElement>('[data-lab]')!;
-  const before = markTells(c.anon.before, c.anon.tells);
-  const tl = gsap.timeline({ paused: true, repeat: -1, repeatDelay: 2.2 });
-  tl.call(() => { txt.innerHTML = before; lab.textContent = c.anon.beforeLabel; })
-    .fromTo(txt, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: LAND })
-    .to(txt, { autoAlpha: 0, y: -12, duration: 0.3, ease: LEAVE }, '+=2.2')
-    .call(() => { txt.textContent = c.anon.after; lab.textContent = c.anon.afterLabel; })
-    .to(txt, { autoAlpha: 1, y: 0, duration: 0.6, ease: LAND })
-    .to({}, { duration: 2.4 });
-  ScrollTrigger.create({ trigger: '#ch-2', start: 'top center', end: 'bottom top', onToggle: (s) => (s.isActive ? tl.play() : tl.pause()) });
+  const sig = box.querySelector<HTMLElement>('.sig')!;
+  let active = false;
+  let tl: gsap.core.Timeline | null = null;
+
+  const once = () => {
+    txt.innerHTML = sp.segments
+      .map((s, i) => (s.tag
+        ? `<span class="seg flag${s.keep ? ' keep' : ''}" data-i="${i}"><em class="tag">${esc(s.tag)}</em><span class="txt">${esc(s.t)}</span><i class="ul"></i><b class="decision">${esc(s.keep ? sp.kept : sp.generalized)}</b></span>`
+        : `<span class="seg"><span class="txt">${esc(s.t)}</span></span>`))
+      .join('');
+    const flags = [...txt.querySelectorAll<HTMLElement>('.seg.flag')];
+    tl = gsap.timeline({ onComplete: () => { if (active) gsap.delayedCall(2.6, once); } });
+    tl.fromTo(txt, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: LAND })
+      .set(sig, { autoAlpha: 0 });
+    flags.forEach((f, k) => {
+      tl!.to(f.querySelector('.ul'), { scaleX: 1, duration: 0.35, ease: LAND }, k === 0 ? '+=0.6' : '+=0.2')
+        .to(f.querySelector('.txt'), { backgroundColor: 'rgba(0, 0, 254, 0.24)', color: '#ffffff', duration: 0.35, ease: LAND }, '<')
+        .fromTo(f.querySelector('.tag'), { y: 8, autoAlpha: 0, scale: 0.8 }, { y: 0, autoAlpha: 1, scale: 1, duration: 0.4, ease: POP }, '<0.1');
+    });
+    tl.addLabel('decide', '+=1');
+    flags.forEach((f, k) => {
+      const seg = sp.segments[Number(f.dataset['i'])]!;
+      const t = f.querySelector<HTMLElement>('.txt')!;
+      const at = `decide+=${k * 0.6}`;
+      tl!.fromTo(f.querySelector('.decision'), { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: 0.35, ease: POP, immediateRender: false }, at);
+      if (seg.keep) return;
+      tl!.to([t, f.querySelector('.tag')], { autoAlpha: 0, duration: 0.22, ease: LEAVE }, `${at}+=0.5`)
+        .to(f.querySelector('.ul'), { scaleX: 0, transformOrigin: 'right', duration: 0.3, ease: LEAVE }, `${at}+=0.5`)
+        .call(() => { t.textContent = seg.to ?? ''; t.style.backgroundColor = 'transparent'; f.classList.add('done'); }, [], `${at}+=0.74`)
+        .fromTo(t, { autoAlpha: 0, color: '#5c6bff' }, { autoAlpha: 1, color: '#ffffff', duration: 0.5, ease: LAND, immediateRender: false }, `${at}+=0.76`);
+    });
+    tl.fromTo(sig, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: POP, immediateRender: false }, '+=0.4')
+      .to({}, { duration: 3 });
+  };
+
+  ScrollTrigger.create({
+    trigger: '#ch-2',
+    start: 'top center',
+    end: 'bottom top',
+    onToggle: (s) => {
+      active = s.isActive;
+      if (active && !tl?.isActive()) once();
+    },
+  });
 }
 
 function stepper(c: Copy, reduced: boolean) {

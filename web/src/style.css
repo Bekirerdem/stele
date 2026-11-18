@@ -86,7 +86,7 @@ main { position: relative; z-index: 2; }
 .chapter { position: relative; height: calc(var(--len, 2) * 100vh); }
 .sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; align-items: center; padding: 88px var(--gutter) 56px calc(var(--gutter) + var(--rail) + 24px); isolation: isolate; }
 /* The scrim keeps the left column readable over a bright field. */
-.sticky::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(90deg, rgba(0, 0, 0, 0.97) 0%, rgba(0, 0, 0, 0.95) 44%, rgba(0, 0, 0, 0.55) 58%, rgba(0, 0, 0, 0) 74%); }
+.sticky::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(90deg, rgba(0, 0, 0, 0.98) 0%, rgba(0, 0, 0, 0.97) 45%, rgba(0, 0, 0, 0.55) 58%, rgba(0, 0, 0, 0) 74%); }
 .text { grid-column: 1 / span 5; align-self: center; }
 .evidence { grid-column: 7 / span 6; align-self: center; }
 .text > .eyebrow { display: block; margin-bottom: 22px; }
@@ -264,3 +264,27 @@ main { position: relative; z-index: 2; }
 @media (prefers-reduced-motion: reduce) {
   .status i, .term .caret { animation: none; }
 }
+
+/* card sector label */
+.face .sec { display: block; margin-bottom: 4px; font-style: normal; font-size: 8px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--blue-ink); }
+
+/* cost: the number next to each fear */
+.stat { display: grid; padding: 34px 36px; min-height: 280px; opacity: 0; transition: opacity .5s; }
+.stat.live { opacity: 1; }
+.stat-card { grid-area: 1 / 1; align-self: center; opacity: 0; transform: translateY(18px); transition: opacity .45s, transform .6s cubic-bezier(0.16, 1, 0.3, 1); }
+.stat-card.on { opacity: 1; transform: none; }
+.stat-n { font-weight: 200; font-size: clamp(72px, 8vw, 132px); line-height: 0.95; letter-spacing: -0.045em; }
+.stat-d { margin: 14px 0 16px; font-size: var(--t-line); line-height: 1.3; color: #e4e4e4; max-width: 30ch; text-wrap: pretty; }
+.evidence .cost-after { margin-top: 22px; font-size: var(--t-line); line-height: 1.3; color: #fff; max-width: 36ch; }
+.cost-after cite, .points cite { font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--dim); margin-left: 8px; letter-spacing: 0.02em; white-space: nowrap; }
+@media (max-width: 999px) { .stat { padding: 20px; min-height: 0; } .stat-n { font-size: 64px; } .stat-d { font-size: 16px; } .evidence .cost-after { font-size: 17px; } }
+
+/* anon: the shield specimen */
+.specimen .draft { font-size: clamp(19px, 1.7vw, 26px); line-height: 2.75; }
+.seg.flag .decision { position: absolute; left: 0; top: 100%; margin-top: -2px; font-family: var(--mono); font-weight: 400; font-size: 10.5px; line-height: 1.5; white-space: nowrap; color: var(--blue-ink); opacity: 0; }
+.seg.flag.keep .decision { padding: 1px 8px; border-radius: 999px; background: #fff; color: #000; }
+.specimen .sig { margin-top: 18px; }
+.stat-card .eyebrow { text-transform: none; letter-spacing: 0.02em; }
+/* A kept span is short; keeping it on one line keeps its labels inside the panel. */
+.seg.flag.keep { white-space: nowrap; }
+@media (max-width: 999px) { .fears .q { display: none; } .ch-cost .body { display: none; } }
