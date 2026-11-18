@@ -27,9 +27,24 @@ function readLang(): Lang {
 }
 let lang: Lang = readLang();
 
-// ---------------------------------------------------------------- markup
-
 const isNarrow = () => window.innerWidth < 760;
+
+/** Deterministic shuffle, so the same cards fall silent on every visit. */
+function shuffled<T>(arr: T[], seed = 7): T[] {
+  const a = [...arr];
+  let s = seed;
+  for (let i = a.length - 1; i > 0; i--) {
+    s = (s * 9301 + 49297) % 233280;
+    const j = Math.floor((s / 233280) * (i + 1));
+    [a[i], a[j]] = [a[j]!, a[i]!];
+  }
+  return a;
+}
+
+// Chapter lengths in viewport heights. The field is shared by all of them.
+const LEN = [4.4, 5, 3, 7, 2, 2, 2, 2.2];
+
+// ---------------------------------------------------------------- markup
 
 function crowd(c: Copy) {
   const cols = isNarrow() ? 6 : 16;
@@ -37,8 +52,11 @@ function crowd(c: Copy) {
   const you = 5 * cols + (cols - (isNarrow() ? 2 : 5));
   let cells = '';
   for (let i = 0; i < cols * rows; i++) {
-    const back = i === you ? '' : c.hero.thoughts[(i * 7 + (i >> 3)) % c.hero.thoughts.length]!;
-    cells += `<div class="cell${i === you ? ' you' : ''}"><div class="card"><div class="face front">${esc(c.hero.said)}</div><div class="face back">${esc(back)}</div></div></div>`;
+    const isYou = i === you;
+    const pick = (n: number, salt: number) => ((i * 2654435761 + salt * 40503) >>> 7) % n; // spread, no column pattern
+    const thought = isYou ? '' : c.hero.thoughts[pick(c.hero.thoughts.length, 1)]!;
+    const who = isYou ? '' : `<small class="who">${esc(c.anon.names[pick(c.anon.names.length, 2)]!)}</small>`;
+    cells += `<div class="cell${isYou ? ' you' : ''}"><div class="card"><div class="face front">${esc(c.hero.said)}</div><div class="face back"><span>${esc(thought)}</span>${who}</div></div></div>`;
   }
   return `<div class="crowd" style="--cols:${cols}">${cells}</div>`;
 }
@@ -47,23 +65,19 @@ const sceneRules = (c: Copy) => `
   <div class="code">${REAL.rules.map((l) => `<span class="ln">${esc(l)}</span>`).join('')}</div>
   <div class="hash-box"><span class="eyebrow">sha-256 · ${esc(c.how.chain)}</span><div class="hash" data-hash>${REAL.rulesHash}</div></div>`;
 
-const TREE = {
-  root: [50, 10],
-  mid: [[27, 44], [73, 44]],
-  leaf: [[13, 80], [39, 80], [61, 80], [87, 80]],
-};
+const TREE = { root: [50, 10], mid: [[27, 44], [73, 44]], leaf: [[13, 80], [39, 80], [61, 80], [87, 80]] };
 function sceneTree(c: Copy) {
-  const [rx, ry] = TREE.root;
+  const r = TREE.root;
   const p = (a: number[], b: number[], hot = false) => `<path pathLength="1" vector-effect="non-scaling-stroke" ${hot ? 'data-hot' : ''} d="M${a[0]} ${a[1]} L${b[0]} ${b[1]}"/>`;
   const paths = [
-    p([rx!, ry!], TREE.mid[0]!, true), p([rx!, ry!], TREE.mid[1]!),
+    p(r, TREE.mid[0]!, true), p(r, TREE.mid[1]!),
     p(TREE.mid[0]!, TREE.leaf[0]!), p(TREE.mid[0]!, TREE.leaf[1]!, true),
     p(TREE.mid[1]!, TREE.leaf[2]!), p(TREE.mid[1]!, TREE.leaf[3]!),
   ].join('');
   const node = (pos: number[], cls: string, inner: string) => `<div class="node ${cls}" style="left:${pos[0]}%;top:${pos[1]}%">${inner}</div>`;
-  const leaves = TREE.leaf.map((pos, i) => node(pos, `leaf${i === 3 ? ' empty' : ''}${i === 1 ? ' me' : ''}`, i === 3 ? c.how.empty : `<b>${c.how.member} ${i + 1}</b>key`)).join('');
+  const leaves = TREE.leaf.map((pos, i) => node(pos, `leaf${i === 3 ? ' empty' : ''}${i === 1 ? ' me' : ''}`, i === 3 ? esc(c.how.empty) : `<b>${esc(c.how.member)} ${i + 1}</b>key`)).join('');
   return `<div class="tree"><svg viewBox="0 0 100 100" preserveAspectRatio="none">${paths}</svg>
-    ${node(TREE.root, 'root', '<b>root</b>on chain')}${TREE.mid.map((m) => node(m, 'mid', 'hash')).join('')}${leaves}
+    ${node(r, 'root', '<b>root</b>on chain')}${TREE.mid.map((m) => node(m, 'mid', 'hash')).join('')}${leaves}
     <div class="proof-badge">${esc(c.how.oneOf)}</div></div>`;
 }
 
@@ -75,7 +89,7 @@ function sceneShield(c: Copy) {
 }
 
 const sceneSeal = (c: Copy) => `
-  <div class="letter"><div class="body" data-body>${esc(c.how.answers[1]!)}</div></div>
+  <div class="letter"><div class="msg" data-body>${esc(c.how.answers[1]!)}</div></div>
   <div class="bucket"><span class="eyebrow" data-bucket>${esc(c.how.bucket)}</span><div class="bar"><div class="fill"></div></div><span class="eyebrow">1 KB</span></div>
   <div class="chainrow"><div class="fp"><span class="eyebrow">${esc(c.how.chain)} · sha-256</span><b data-fp>&nbsp;</b></div>
   <div class="stamp"><span><b>${esc(c.how.stamp)}</b>1 / 1</span></div></div>`;
@@ -84,7 +98,7 @@ const sceneGate = (c: Copy) => `
   <div class="gate"><div class="count"><span data-count>0</span><small> / 3</small></div><span class="phase" data-phase>${esc(c.how.phaseOpen)}</span></div>
   <div class="locked" data-locked>${esc(c.how.locked)}</div>
   <ul class="answers">${c.how.answers.map((a) => `<li><span class="t">${esc(a)}</span><span class="rm">${esc(c.how.removed)}</span><i class="strike"></i></li>`).join('')}</ul>
-  <div class="eyebrow" style="margin-top:14px" data-run>${esc(c.how.realRun)}</div>`;
+  <div class="eyebrow" style="margin-top:14px">${esc(c.how.realRun)}</div>`;
 
 const SCENES = [sceneRules, sceneTree, sceneShield, sceneSeal, sceneGate];
 
@@ -112,107 +126,98 @@ function markTells(text: string, tells: string[]) {
   return out;
 }
 
-function template(c: Copy) {
-  return `
-<header class="nav" id="nav">
-  <a class="brand" href="#top"><b>stele</b><span>${eb(c.tag)}</span></a>
-  <nav class="nav-links">
-    <a class="hide-sm" href="#how">${esc(c.nav.how)}</a>
-    <a class="hide-sm" href="#who">${esc(c.nav.who)}</a>
-    <a class="hide-sm" href="#verify">${esc(c.nav.verify)}</a>
-    <button class="lang" id="lang" aria-label="Language">${esc(c.nav.lang)}</button>
-    <a class="code" href="${REAL.repo}" target="_blank" rel="noopener">${esc(c.nav.code)}</a>
-  </nav>
-</header>
+const label = (c: Copy, i: number) => `<div class="eyebrow">0${i + 1}  ${eb(c.chapters[i]!)}</div>`;
+const chapter = (i: number, cls: string, inner: string) =>
+  `<section class="chapter ${cls}" id="ch-${i}" style="--len:${LEN[i]}"><div class="sticky">${inner}</div></section>`;
 
-<section class="hero" id="top">
-  ${crowd(c)}
-  <div class="veil"></div>
-  <div class="hero-copy">
-    <div class="eyebrow">${eb(c.hero.eyebrow)}</div>
-    <h1>${c.hero.title.map((l) => `<span class="line"><span>${esc(l)}</span></span>`).join('')}</h1>
-    <p class="sub">${esc(c.hero.sub)}</p>
+function template(c: Copy) {
+  const rail = c.chapters.map((n, i) => `<li data-ch="${i}"><a href="#ch-${i}"><span>0${i + 1}</span><span class="name">${eb(n)}</span></a></li>`).join('');
+  return `
+<header class="top">
+  <a class="brand" href="#ch-0"><b>stele</b><span>${eb(c.tag)}</span></a>
+  <div class="top-actions">
+    <button class="pill" id="lang" aria-label="Language">${esc(c.nav.lang)}</button>
+    <a class="btn" href="${REAL.repo}" target="_blank" rel="noopener">${esc(c.nav.code)}</a>
+  </div>
+</header>
+<div class="progress"><i></i></div>
+<ol class="rail">${rail}</ol>
+<div class="field" aria-hidden="true">${crowd(c)}</div>
+<main>
+${chapter(0, 'ch-hero', `
+  <div class="text">
+    ${label(c, 0)}
+    <h1 class="hero-title">${c.hero.title.map((l) => `<span class="line"><span>${esc(l)}</span></span>`).join('')}</h1>
+    <p class="hero-sub">${esc(c.hero.sub)}</p>
   </div>
   <div class="scroll-hint eyebrow"><span>${esc(c.hero.scroll)}</span><i></i></div>
   <div class="beat b1">${esc(c.hero.beat1)}</div>
   <div class="beat b2">${esc(c.hero.beat2)}</div>
-  <div class="beat b3">${esc(c.hero.you)}</div>
-</section>
-
-<section class="block" id="cost">
-  <div class="wrap">
-    <div class="eyebrow">${eb(c.cost.eyebrow)}</div>
-    <div class="cost-head"><h2 class="h2 split">${esc(c.cost.title)}</h2><p class="lead">${esc(c.cost.body)}</p></div>
-    <div class="cost-rows">${c.cost.rows.map((r) => `<div class="cost-row"><span class="k">${esc(r.k)}</span><span class="line">${esc(r.line)}</span><span class="q">${esc(r.q)}</span></div>`).join('')}</div>
+  <div class="beat b3">${esc(c.hero.you)}</div>`)}
+${chapter(1, 'ch-cost', `
+  <div class="text">
+    ${label(c, 1)}
+    <h2 class="title split">${esc(c.cost.title)}</h2>
+    <p class="body">${esc(c.cost.body)}</p>
+    <ol class="fears">${c.cost.rows.map((r) => `<li><span class="k">${esc(r.k)}</span><span class="line">${esc(r.line)}</span><span class="q">${esc(r.q)}</span></li>`).join('')}</ol>
+    <p class="cost-after">${esc(c.cost.after)}</p>
+  </div>`)}
+${chapter(2, 'ch-anon', `
+  <div class="text">
+    ${label(c, 2)}
+    <h2 class="title split">${esc(c.anon.title)}</h2>
+    <ol class="points">${c.anon.points.map((p, i) => `<li><b>0${i + 1}</b><span>${esc(p)}${i === 1 ? `<cite>${esc(c.anon.cite)}</cite>` : ''}</span></li>`).join('')}</ol>
+    <p class="fix">${esc(c.anon.fix)}</p>
   </div>
-</section>
-
-<section class="block" id="anon">
-  <div class="wrap anon-grid">
-    <div>
-      <div class="eyebrow">${eb(c.anon.eyebrow)}</div>
-      <h2 class="h2 split" style="margin-top:28px">${esc(c.anon.title)}</h2>
-      <ol class="anon-points">${c.anon.points.map((p, i) => `<li><b>0${i + 1}</b><span>${esc(p)}${i === 1 ? `<cite>${esc(c.anon.cite)}</cite>` : ''}</span></li>`).join('')}</ol>
-      <p class="anon-fix">${esc(c.anon.fix)}</p>
-    </div>
-    <div class="specimen" id="specimen">
-      <div class="lab"><span class="eyebrow" data-lab>${esc(c.anon.beforeLabel)}</span><span class="eyebrow">NEAR AI · TEE</span></div>
-      <div class="txt" data-txt>${markTells(c.anon.before, c.anon.tells)}</div>
-    </div>
+  <div class="evidence"><div class="panel specimen" id="specimen">
+    <div class="lab"><span class="eyebrow" data-lab>${esc(c.anon.beforeLabel)}</span><span class="eyebrow">NEAR AI · TEE</span></div>
+    <div class="txt" data-txt>${markTells(c.anon.before, c.anon.tells)}</div>
+  </div></div>`)}
+${chapter(3, 'ch-how', `
+  <div class="text">
+    ${label(c, 3)}
+    <div class="steps">${c.how.steps.map((s) => `<div class="t"><h2 class="title">${esc(s.title)}</h2><p class="body">${esc(s.body)}</p></div>`).join('')}</div>
+    <div class="dots">${c.how.steps.map(() => '<i></i>').join('')}</div>
   </div>
-</section>
-
-<section class="how" id="how">
-  <div class="how-pin">
-    <div class="rail">
-      <div>
-        <div class="eyebrow">${eb(c.how.eyebrow)}</div>
-        <ol class="rail-steps"><span class="rail-bar"></span>${c.how.steps.map((s, i) => `<li data-step="${i}"><span class="n">0${i + 1}</span><span>${esc(s.title)}</span></li>`).join('')}</ol>
-      </div>
-      <div class="rail-text">${c.how.steps.map((s) => `<div class="t"><h3>${esc(s.title)}</h3><p>${esc(s.body)}</p></div>`).join('')}</div>
-    </div>
-    <div class="stage">
-      ${SCENES.map((_, i) => `<div class="scene" data-scene="${i}"></div>`).join('')}
-      <div class="stage-foot"><span class="eyebrow note" data-note></span><span class="eyebrow" data-idx>01 / 05</span></div>
-    </div>
+  <div class="evidence"><div class="panel stage">
+    ${SCENES.map((_, i) => `<div class="scene" data-scene="${i}"></div>`).join('')}
+    <div class="stage-foot"><span class="eyebrow note" data-note></span><span class="eyebrow" data-idx>01 / 05</span></div>
+  </div></div>`)}
+${chapter(4, 'ch-sees', `
+  <div class="text">
+    ${label(c, 4)}
+    <h2 class="title split">${esc(c.sees.title)}</h2>
+    <p class="body">${esc(c.sees.body)}</p>
   </div>
-</section>
-
-<section class="block" id="who">
-  <div class="wrap sees-grid">
-    <div><div class="eyebrow">${eb(c.sees.eyebrow)}</div><h2 class="h2 split" style="margin-top:28px">${esc(c.sees.title)}</h2></div>
-    <div class="sees-table">
-      <div class="sees-head"><span></span><span>${esc(c.sees.cols[0]!)}</span><span>${esc(c.sees.cols[1]!)}</span></div>
-      ${c.sees.rows.map((r) => `<div class="sees-row"><span class="who">${esc(r.who)}</span><span class="s">${esc(r.sees)}</span><span class="nv">${esc(r.never)}</span></div>`).join('')}
-    </div>
+  <div class="evidence"><div class="panel sees">
+    <div class="sees-head"><span></span><span>${esc(c.sees.cols[0]!)}</span><span>${esc(c.sees.cols[1]!)}</span></div>
+    ${c.sees.rows.map((r) => `<div class="sees-row"><span class="who">${esc(r.who)}</span><span class="s">${esc(r.sees)}</span><span class="nv">${esc(r.never)}</span></div>`).join('')}
+  </div></div>`)}
+${chapter(5, 'ch-verify', `
+  <div class="text">
+    ${label(c, 5)}
+    <h2 class="title split">${esc(c.verify.title)}</h2>
+    <p class="body">${esc(c.verify.body)}</p>
   </div>
-</section>
-
-<section class="block" id="verify">
-  <div class="wrap verify-grid">
-    <div><div class="eyebrow">${eb(c.verify.eyebrow)}</div><h2 class="h2 split" style="margin:28px 0 24px">${esc(c.verify.title)}</h2><p class="lead">${esc(c.verify.body)}</p></div>
-    <div class="term"><div class="term-bar"><i></i><i></i><i></i></div><pre id="term"><span class="caret"></span></pre></div>
+  <div class="evidence"><div class="panel term"><div class="term-bar"><i></i><i></i><i></i></div><pre id="term"><span class="caret"></span></pre></div></div>`)}
+${chapter(6, 'ch-limits', `
+  <div class="text">
+    ${label(c, 6)}
+    <h2 class="title split">${esc(c.limits.title)}</h2>
+    <p class="body">${esc(c.limits.body)}</p>
   </div>
-</section>
-
-<section class="block" id="limits">
-  <div class="wrap">
-    <div class="eyebrow">${eb(c.limits.eyebrow)}</div>
-    <div class="limits">${c.limits.rows.map((r) => `<div class="limit"><span class="no">${esc(r.no)}<i></i></span><span class="yes">${esc(r.yes)}</span></div>`).join('')}</div>
-  </div>
-</section>
-
-<section class="block end" id="end">
-  <div class="wrap">
-    <div class="eyebrow">${eb(c.end.eyebrow)}</div>
-    <h2 class="h2 split">${esc(c.end.title)}</h2>
+  <div class="evidence"><div class="panel limits">${c.limits.rows.map((r) => `<div class="limit"><span class="no">${esc(r.no)}<i></i></span><span class="yes">${esc(r.yes)}</span></div>`).join('')}</div></div>`)}
+${chapter(7, 'ch-end', `
+  <div class="text">
+    ${label(c, 7)}
+    <h2 class="title split">${esc(c.end.title)}</h2>
     <div class="end-row">
       <a class="btn" href="${REAL.repo}" target="_blank" rel="noopener">${esc(c.end.code)} <span aria-hidden="true">→</span></a>
-      <span class="status"><i></i>${esc(c.end.status)}</span>
+      <span class="status"><i></i>${eb(c.end.status)}</span>
     </div>
-    <div class="foot"><span>${esc(c.end.foot)}</span><span class="mono">stele v0.2.0</span></div>
   </div>
-</section>`;
+  <div class="foot"><span>${esc(c.end.foot)}</span><span class="mono">stele v0.2.0</span></div>`)}
+</main>`;
 }
 
 // ---------------------------------------------------------------- helpers
@@ -240,7 +245,7 @@ async function sha256Hex(text: string) {
   return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-// ---------------------------------------------------------------- scenes
+// ---------------------------------------------------------------- stage scenes
 
 type SceneBuild = (root: HTMLElement, c: Copy) => gsap.core.Timeline;
 
@@ -285,7 +290,7 @@ const buildShield: SceneBuild = (root, c) => {
     const seg = c.how.draft[Number(f.dataset['i'])]!;
     const txt = f.querySelector<HTMLElement>('.txt')!;
     const at = `swap+=${k * 0.35}`;
-    tl.to([txt, f.querySelector('.tag')], { y: -10, autoAlpha: 0, duration: 0.22, ease: LEAVE }, at)
+    tl.to([txt, f.querySelector('.tag')], { autoAlpha: 0, duration: 0.22, ease: LEAVE }, at)
       .to(f.querySelector('.ul'), { scaleX: 0, transformOrigin: 'right', duration: 0.3, ease: LEAVE }, at)
       .call(() => {
         txt.textContent = seg.to ?? '';
@@ -293,7 +298,7 @@ const buildShield: SceneBuild = (root, c) => {
         txt.style.backgroundColor = 'transparent';
         if (!seg.to) f.style.display = 'none';
       }, [], `${at}+=0.24`)
-      .fromTo(txt, { y: 10, autoAlpha: 0, color: '#5c6bff' }, { y: 0, autoAlpha: 1, color: '#ffffff', duration: 0.5, ease: LAND, immediateRender: false }, `${at}+=0.26`);
+      .fromTo(txt, { autoAlpha: 0, color: '#5c6bff' }, { autoAlpha: 1, color: '#ffffff', duration: 0.5, ease: LAND, immediateRender: false }, `${at}+=0.26`);
   });
   tl.from(root.querySelector('.sig'), { y: 16, autoAlpha: 0, duration: 0.5, ease: POP }, '+=0.3');
   return tl;
@@ -302,18 +307,16 @@ const buildShield: SceneBuild = (root, c) => {
 const buildSeal: SceneBuild = (root, c) => {
   const tl = gsap.timeline();
   const body = root.querySelector<HTMLElement>('[data-body]')!;
-  const label = root.querySelector<HTMLElement>('[data-bucket]')!;
+  const lab = root.querySelector<HTMLElement>('[data-bucket]')!;
   const fp = root.querySelector<HTMLElement>('[data-fp]')!;
   const sealed = rand(Math.max(96, c.how.answers[1]!.length * 2));
   tl.from(root.querySelector('.letter'), { y: 24, autoAlpha: 0, duration: 0.5, ease: LAND })
     .from(root.querySelectorAll('.bucket, .chainrow'), { y: 16, autoAlpha: 0, duration: 0.5, ease: LAND, stagger: 0.1 }, '-=0.2')
     .to(root.querySelector('.fill'), { scaleX: 1, duration: 1, ease: SHIFT }, '+=0.3')
-    .call(() => { label.textContent = c.how.sealed; body.classList.add('mono'); }, [], '+=0.1')
+    .call(() => { lab.textContent = c.how.sealed; body.classList.add('mono'); }, [], '+=0.1')
     .add(() => { scramble(body, sealed, 0.9); }, '<')
     .to(body, { color: '#9e9e9e', duration: 0.6 }, '<')
-    .call(() => {
-      void sha256Hex(sealed).then((h) => { scramble(fp, h, 0.8); });
-    }, [], '+=0.9')
+    .call(() => { void sha256Hex(sealed).then((h) => { scramble(fp, h, 0.8); }); }, [], '+=0.9')
     .from(root.querySelector('.stamp'), { scale: 2.2, autoAlpha: 0, rotate: -40, duration: 0.55, ease: POP }, '+=0.7');
   return tl;
 };
@@ -326,7 +329,8 @@ const buildGate: SceneBuild = (root, c) => {
   gsap.set(items, { autoAlpha: 0, y: 16 });
   tl.from(root.querySelector('.gate'), { y: 20, autoAlpha: 0, duration: 0.5, ease: LAND });
   [1, 2, 3].forEach((n) => {
-    tl.call(() => { count.textContent = String(n); }, [], '+=0.45').fromTo(count, { scale: 1.25 }, { scale: 1, duration: 0.4, ease: POP, transformOrigin: 'left bottom', immediateRender: false });
+    tl.call(() => { count.textContent = String(n); }, [], '+=0.45')
+      .fromTo(count, { scale: 1.25 }, { scale: 1, duration: 0.4, ease: POP, transformOrigin: 'left bottom', immediateRender: false });
   });
   tl.call(() => { phase.textContent = c.how.phaseClosed; phase.classList.add('closed'); }, [], '+=0.5')
     .fromTo(phase, { scale: 1.2 }, { scale: 1, duration: 0.4, ease: POP, immediateRender: false })
@@ -334,17 +338,144 @@ const buildGate: SceneBuild = (root, c) => {
     .to(items, { autoAlpha: 1, y: 0, duration: 0.5, ease: LAND, stagger: 0.12 })
     .to(items[2]!.querySelector('.strike'), { scaleX: 1, duration: 0.45, ease: SHIFT }, '+=0.8')
     .call(() => { items[2]!.classList.add('removed'); }, [], '+=0.15')
-    .fromTo(items[2]!.querySelector('.rm'), { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: LAND });
+    .fromTo(items[2]!.querySelector('.rm'), { autoAlpha: 0, y: 8 }, { autoAlpha: 1, y: 0, duration: 0.4, ease: LAND, immediateRender: false });
   return tl;
 };
 
 const BUILDERS: SceneBuild[] = [buildRules, buildTree, buildShield, buildSeal, buildGate];
 
-// ---------------------------------------------------------------- page motion
+// ---------------------------------------------------------------- the field
+//
+// One set of cards for the whole story. Every chapter's timeline moves it from
+// the state the previous chapter left it in, with explicit from and to values,
+// so scrolling back and forth always lands on the same picture:
+//   01 everyone says "I'm fine" → the cards turn: what they really think →
+//      one card is you → the camera dives into it
+//   02 back out → under each fear a group turns back to "I'm fine"
+//   03 everyone answers again, but a name sits under every answer
+//   04-07 the names blur away; the crowd stays behind the evidence
+//   08 the crowd comes back: honest answers, no names
 
-function nav() {
-  const el = document.getElementById('nav')!;
-  ScrollTrigger.create({ start: 40, end: 'max', onToggle: (s) => el.classList.toggle('solid', s.isActive) });
+type Field = { crowd: HTMLElement; cards: HTMLElement[]; you: HTMLElement; youCard: HTMLElement; groups: HTMLElement[][] };
+
+function getField(): Field {
+  const crowdEl = document.querySelector<HTMLElement>('.crowd')!;
+  const you = crowdEl.querySelector<HTMLElement>('.cell.you')!;
+  const cards = gsap.utils.toArray<HTMLElement>('.cell:not(.you) .card');
+  const mixed = shuffled(cards);
+  const n = Math.ceil(mixed.length / 4);
+  const groups = [0, 1, 2, 3].map((g) => mixed.slice(g * n, (g + 1) * n));
+  return { crowd: crowdEl, cards, you, youCard: you.querySelector<HTMLElement>('.card')!, groups };
+}
+
+// The whole story runs on ONE timeline scrubbed by the whole page, measured in
+// viewport heights: time 4.4 is the moment the page has scrolled 4.4 screens.
+// Separate timelines per chapter fought over the same cards whenever someone
+// jumped (rail links, reload mid-page); one timeline always renders in order.
+const START = LEN.map((_, i) => LEN.slice(0, i).reduce((a, b) => a + b, 0));
+const SPAN = LEN.reduce((a, b) => a + b, 0) - 1;
+/** Fear k turns its group of cards back at this scroll position (in screens). */
+const fearAt = (k: number) => START[1]! + 0.4 + k * 0.8;
+
+function story(f: Field) {
+  const zoom = () => (window.innerWidth / f.you.offsetWidth) * 1.6;
+  const origin = () => `${f.you.offsetLeft + f.you.offsetWidth / 2}px ${f.you.offsetTop + f.you.offsetHeight / 2}px`;
+  const b3 = SplitText.create('.b3', { type: 'words' });
+  const fx = { immediateRender: false };
+  // How bright the crowd is, how visible the names are and how blurred: tweened
+  // on a plain object and written to CSS variables on every frame. Tweening the
+  // variables directly lost their start values when scrubbed backwards.
+  const P = { fade: 1, who: 0, blur: 0 };
+  const paint = () => {
+    f.crowd.style.setProperty('--fade', P.fade.toFixed(3));
+    f.crowd.style.setProperty('--who', P.who.toFixed(3));
+    f.crowd.style.setProperty('--whoblur', `${P.blur.toFixed(2)}px`);
+  };
+  paint();
+  const tl = gsap.timeline({
+    defaults: { ease: SHIFT },
+    onUpdate: paint,
+    scrollTrigger: { trigger: 'main', start: 'top top', end: 'bottom bottom', scrub: 0.6, invalidateOnRefresh: true },
+  });
+
+  // 01 the question: everyone says "I'm fine"; the cards turn; one is you.
+  tl.to('.ch-hero .text', { y: -140, autoAlpha: 0, duration: 0.45 }, 0.001)
+    .to('.scroll-hint', { autoAlpha: 0, duration: 0.15 }, 0.001)
+    .to(f.cards, { rotateX: 180, duration: 0.3, stagger: { amount: 1.05, from: 'random' } }, 0.2)
+    .fromTo('.b1', { autoAlpha: 0, y: 50 }, { autoAlpha: 1, y: 0, duration: 0.25, ease: LAND, ...fx }, 0.65)
+    .to('.b1', { autoAlpha: 0, y: -50, duration: 0.2, ease: LEAVE }, 1.2)
+    .to(P, { fade: 0.12, duration: 0.3 }, 1.25)
+    .fromTo('.b2', { autoAlpha: 0, y: 50 }, { autoAlpha: 1, y: 0, duration: 0.25, ease: LAND, ...fx }, 1.35)
+    .to('.b2', { autoAlpha: 0, y: -50, duration: 0.2, ease: LEAVE }, 1.75)
+    .set(f.crowd, { transformOrigin: origin }, 1.78)
+    .to(f.crowd, { scale: zoom, duration: 0.75 }, 1.8)
+    .to(f.youCard, { rotateX: 180, duration: 0.4 }, 1.8)
+    .set('.b3', { autoAlpha: 1 }, 2.5)
+    .from(b3.words, { yPercent: 60, autoAlpha: 0, duration: 0.25, ease: LAND, stagger: 0.025 }, 2.5);
+
+  // 02 the price: back out of the blue card; under each fear a group goes quiet.
+  // Plain .to tweens on one timeline: each picks up where the last one left
+  // the card, in order, however far the reader jumps.
+  const s1 = START[1]! - 1;
+  tl.to(f.crowd, { scale: 1, duration: 0.5 }, s1)
+    .to(P, { fade: 1, duration: 0.4 }, s1 + 0.1)
+    .to(f.youCard, { rotateX: 0, duration: 0.25 }, s1 + 0.45);
+  f.groups.forEach((g, k) => {
+    tl.to(g, { rotateX: 0, duration: 0.3, stagger: { amount: 0.25, from: 'random' } }, fearAt(k));
+  });
+  tl.fromTo('.cost-after', { autoAlpha: 0, y: 16 }, { autoAlpha: 1, y: 0, duration: 0.2, ease: LAND, ...fx }, fearAt(3) + 0.7)
+    .to(P, { fade: 0.45, duration: 0.3 }, fearAt(3) + 0.8);
+
+  // 03 anonymous forms: everyone answers again, and a name sits under each answer.
+  const s2 = START[2]! - 1;
+  tl.to([...f.cards, f.youCard], { rotateX: 180, duration: 0.3, stagger: { amount: 0.45, from: 'random' } }, s2)
+    .to(P, { fade: 0.8, duration: 0.3 }, s2 + 0.2)
+    .to(P, { who: 1, duration: 0.35, ease: LAND }, s2 + 1.1);
+
+  // 04-07: Stele takes the names away; the crowd stays, quiet, and the camera
+  // keeps pushing in so the room never freezes.
+  const s3 = START[3]! - 1;
+  const s7 = START[7]! - 1;
+  tl.to(P, { blur: 8, duration: 0.4 }, s3)
+    .to(P, { who: 0, duration: 0.4 }, s3 + 0.2)
+    .to(P, { fade: 0.18, duration: 0.4 }, s3 + 0.3)
+    .to(f.crowd, { scale: 1.14, duration: s7 - (s3 + 0.3), ease: 'none' }, s3 + 0.3);
+
+  // 08 the last word: the crowd comes back, honest and nameless.
+  tl.to(f.crowd, { scale: 1, duration: 1 }, s7)
+    .to(P, { fade: 0.75, duration: 1 }, s7)
+    .set({}, {}, SPAN);
+
+  // Which fear is lit follows the same clock.
+  const rows = gsap.utils.toArray<HTMLElement>('.fears li');
+  ScrollTrigger.create({
+    trigger: '#ch-1',
+    start: 'top bottom',
+    end: 'bottom bottom',
+    onUpdate: () => {
+      const at = window.scrollY / window.innerHeight;
+      let k = -1;
+      for (let i = 0; i < 4; i++) if (at >= fearAt(i) - 0.15) k = i;
+      rows.forEach((r, i) => r.classList.toggle('on', i === k));
+    },
+  });
+}
+
+// ---------------------------------------------------------------- chapter UI
+
+function rail() {
+  const items = gsap.utils.toArray<HTMLElement>('.rail li');
+  LEN.forEach((_, i) => {
+    ScrollTrigger.create({
+      trigger: `#ch-${i}`,
+      start: 'top center',
+      end: 'bottom center',
+      onToggle: (s) => { if (s.isActive) items.forEach((li, k) => li.classList.toggle('on', k === i)); },
+    });
+  });
+  items[0]?.classList.add('on');
+  const bar = document.querySelector('.progress i');
+  ScrollTrigger.create({ start: 0, end: 'max', onUpdate: (s) => gsap.set(bar, { scaleX: s.progress }) });
   document.getElementById('lang')!.addEventListener('click', () => {
     lang = lang === 'en' ? 'tr' : 'en';
     try { localStorage.setItem('stele.lang', lang); } catch { /* storage blocked */ }
@@ -353,65 +484,23 @@ function nav() {
 }
 
 function heroIntro() {
-  const tl = gsap.timeline({ defaults: { ease: LAND } });
-  tl.from('.cell', { scale: 0.4, autoAlpha: 0, duration: 0.7, stagger: { each: 0.006, from: 'random' } })
-    .from('.hero .eyebrow', { y: 14, autoAlpha: 0, duration: 0.5 }, 0.25)
-    .from('.hero h1 .line > span', { yPercent: 110, duration: 1, stagger: 0.09 }, 0.3)
-    .from('.hero .sub', { y: 20, autoAlpha: 0, duration: 0.7 }, 0.75)
+  gsap.timeline({ defaults: { ease: LAND } })
+    .from('.cell', { scale: 0.4, autoAlpha: 0, duration: 0.7, stagger: { each: 0.004, from: 'random' } })
+    .from('.ch-hero .eyebrow', { y: 14, autoAlpha: 0, duration: 0.5 }, 0.25)
+    .from('.hero-title .line > span', { yPercent: 110, duration: 1, stagger: 0.1 }, 0.3)
+    .from('.hero-sub', { y: 20, autoAlpha: 0, duration: 0.7 }, 0.75)
     .from('.scroll-hint', { autoAlpha: 0, duration: 0.6 }, 1);
-}
-
-function heroScroll(reduced: boolean) {
-  if (reduced) return;
-  const crowdEl = document.querySelector<HTMLElement>('.crowd')!;
-  const you = document.querySelector<HTMLElement>('.cell.you')!;
-  const others = gsap.utils.toArray<HTMLElement>('.cell:not(.you) .card');
-  const youCard = you.querySelector<HTMLElement>('.card')!;
-  const zoom = () => (window.innerWidth / you.offsetWidth) * 1.6;
-  const origin = () => `${you.offsetLeft + you.offsetWidth / 2}px ${you.offsetTop + you.offsetHeight / 2}px`;
-  const b3 = SplitText.create('.beat.b3', { type: 'words' });
-
-  const tl = gsap.timeline({
-    scrollTrigger: { trigger: '.hero', start: 'top top', end: '+=320%', pin: true, scrub: 0.8, invalidateOnRefresh: true },
-  });
-  tl.to('.hero-copy', { y: -140, autoAlpha: 0, duration: 1, ease: SHIFT }, 0)
-    .to('.scroll-hint', { autoAlpha: 0, duration: 0.3 }, 0)
-    .to('.veil', { autoAlpha: 0.25, duration: 1, ease: SHIFT }, 0.2)
-    .to(others, { rotateX: 180, duration: 0.6, ease: SHIFT, stagger: { each: 0.018, from: 'random' } }, 0.5)
-    .fromTo('.beat.b1', { autoAlpha: 0, y: 50 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: LAND }, 1.3)
-    .to('.beat.b1', { autoAlpha: 0, y: -50, duration: 0.4, ease: LEAVE }, 2.6)
-    .fromTo(crowdEl, { '--fade': 1 }, { '--fade': 0.12, duration: 0.6, ease: SHIFT }, 2.7)
-    .fromTo('.beat.b2', { autoAlpha: 0, y: 50 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: LAND }, 2.9)
-    .to('.beat.b2', { autoAlpha: 0, y: -50, duration: 0.4, ease: LEAVE }, 3.7)
-    .set(crowdEl, { transformOrigin: origin }, 3.7)
-    .to(crowdEl, { scale: zoom, duration: 1.6, ease: SHIFT }, 3.8)
-    .to(youCard, { rotateX: 180, duration: 0.8, ease: SHIFT }, 3.8)
-    .set('.beat.b3', { autoAlpha: 1 }, 5.2)
-    .from(b3.words, { yPercent: 60, autoAlpha: 0, duration: 0.5, ease: LAND, stagger: 0.05 }, 5.2)
-    .to({}, { duration: 0.8 });
 }
 
 function headings() {
   gsap.utils.toArray<HTMLElement>('.split').forEach((el) => {
     const s = SplitText.create(el, { type: 'lines,words', mask: 'lines' });
-    gsap.from(s.words, { yPercent: 110, duration: 0.9, ease: LAND, stagger: 0.025, scrollTrigger: { trigger: el, start: 'top 85%', once: true } });
+    gsap.from(s.words, { yPercent: 110, duration: 0.9, ease: LAND, stagger: 0.025, scrollTrigger: { trigger: el.closest('.chapter')!, start: 'top 60%', toggleActions: 'play none none reverse' } });
   });
-}
-
-function reveals() {
-  ScrollTrigger.batch('.cost-row, .sees-row, .anon-points li', {
-    start: 'top 88%',
-    once: true,
-    onEnter: (els) => gsap.from(els, { y: 40, autoAlpha: 0, duration: 0.7, ease: LAND, stagger: 0.08 }),
-  });
-  ScrollTrigger.batch('.limit', {
-    start: 'top 85%',
-    once: true,
-    onEnter: (els) => {
-      const tl = gsap.timeline();
-      tl.from(els, { y: 30, autoAlpha: 0, duration: 0.6, ease: LAND, stagger: 0.08 })
-        .to(els.map((e) => e.querySelector('.no i')), { scaleX: 1, duration: 0.45, ease: SHIFT, stagger: 0.1 }, '-=0.3');
-    },
+  // Every chapter's left column and evidence arrive the same way.
+  gsap.utils.toArray<HTMLElement>('.chapter:not(.ch-hero)').forEach((ch) => {
+    const parts = ch.querySelectorAll('.text > .eyebrow, .text > .body, .fears, .points, .fix, .dots, .evidence, .end-row');
+    gsap.from(parts, { y: 36, autoAlpha: 0, duration: 0.8, ease: LAND, stagger: 0.08, scrollTrigger: { trigger: ch, start: 'top 55%', toggleActions: 'play none none reverse' } });
   });
 }
 
@@ -421,20 +510,19 @@ function specimen(c: Copy) {
   const lab = box.querySelector<HTMLElement>('[data-lab]')!;
   const before = markTells(c.anon.before, c.anon.tells);
   const tl = gsap.timeline({ paused: true, repeat: -1, repeatDelay: 2.2 });
-  tl.call(() => { txt.innerHTML = before; txt.classList.remove('after'); lab.textContent = c.anon.beforeLabel; })
-    .from(txt, { autoAlpha: 0, y: 12, duration: 0.5, ease: LAND })
-    .from(txt.querySelectorAll('mark'), { boxShadow: 'inset 0 0 0 transparent', duration: 0.4, stagger: 0.25 }, '+=0.6')
-    .to(txt, { autoAlpha: 0, y: -12, duration: 0.3, ease: LEAVE }, '+=1.6')
-    .call(() => { txt.textContent = c.anon.after; txt.classList.add('after'); lab.textContent = c.anon.afterLabel; })
+  tl.call(() => { txt.innerHTML = before; lab.textContent = c.anon.beforeLabel; })
+    .fromTo(txt, { autoAlpha: 0, y: 12 }, { autoAlpha: 1, y: 0, duration: 0.5, ease: LAND })
+    .to(txt, { autoAlpha: 0, y: -12, duration: 0.3, ease: LEAVE }, '+=2.2')
+    .call(() => { txt.textContent = c.anon.after; lab.textContent = c.anon.afterLabel; })
     .to(txt, { autoAlpha: 1, y: 0, duration: 0.6, ease: LAND })
     .to({}, { duration: 2.4 });
-  ScrollTrigger.create({ trigger: box, start: 'top 80%', end: 'bottom 10%', onToggle: (s) => (s.isActive ? tl.play() : tl.pause()) });
+  ScrollTrigger.create({ trigger: '#ch-2', start: 'top center', end: 'bottom top', onToggle: (s) => (s.isActive ? tl.play() : tl.pause()) });
 }
 
 function stepper(c: Copy, reduced: boolean) {
   const n = c.how.steps.length;
-  const texts = gsap.utils.toArray<HTMLElement>('.rail-text .t');
-  const lis = gsap.utils.toArray<HTMLElement>('.rail-steps li');
+  const texts = gsap.utils.toArray<HTMLElement>('.steps .t');
+  const dots = gsap.utils.toArray<HTMLElement>('.dots i');
   const scenes = gsap.utils.toArray<HTMLElement>('.scene');
   const note = document.querySelector<HTMLElement>('[data-note]')!;
   const idx = document.querySelector<HTMLElement>('[data-idx]')!;
@@ -448,31 +536,27 @@ function stepper(c: Copy, reduced: boolean) {
     current = i;
     if (prev >= 0) {
       gsap.to(texts[prev]!, { y: -24, autoAlpha: 0, duration: 0.25, ease: LEAVE, overwrite: true });
-      gsap.to(scenes[prev]!, { autoAlpha: 0, scale: 0.98, duration: 0.25, ease: LEAVE, overwrite: true });
+      gsap.to(scenes[prev]!, { autoAlpha: 0, duration: 0.25, ease: LEAVE, overwrite: true });
     }
     running?.kill();
     gsap.fromTo(texts[i]!, { y: 28, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.6, ease: LAND, delay: prev >= 0 ? 0.18 : 0, overwrite: true });
-    lis.forEach((li, k) => li.classList.toggle('on', k === i));
+    dots.forEach((d, k) => d.classList.toggle('on', k === i));
     note.textContent = c.how.steps[i]!.note;
     idx.textContent = `0${i + 1} / 0${n}`;
     const scene = scenes[i]!;
     scene.innerHTML = SCENES[i]!(c);
-    gsap.fromTo(scene, { autoAlpha: 0, scale: 1.02 }, { autoAlpha: 1, scale: 1, duration: 0.45, ease: LAND, delay: prev >= 0 ? 0.15 : 0, overwrite: true });
+    gsap.fromTo(scene, { autoAlpha: 0 }, { autoAlpha: 1, duration: 0.4, ease: LAND, delay: prev >= 0 ? 0.15 : 0, overwrite: true });
     running = BUILDERS[i]!(scene, c);
     if (reduced) running.progress(1);
-    else running.delay(prev >= 0 ? 0.25 : 0);
+    else running.delay(prev >= 0 ? 0.25 : 0.1);
   };
 
   show(0);
   ScrollTrigger.create({
-    trigger: '.how-pin',
+    trigger: '#ch-3',
     start: 'top top',
-    end: `+=${n * 90}%`,
-    pin: true,
-    onUpdate: (s) => {
-      show(Math.min(n - 1, Math.floor(s.progress * n)));
-      gsap.set('.rail-bar', { scaleY: s.progress });
-    },
+    end: 'bottom bottom',
+    onUpdate: (s) => show(Math.min(n - 1, Math.floor(s.progress * n))),
   });
 }
 
@@ -480,40 +564,51 @@ function terminal(reduced: boolean) {
   const pre = document.getElementById('term')!;
   const lines = terminalLines();
   const caret = '<span class="caret"></span>';
-  const render = (done: { cls: string; text: string }[], partial = '') =>
+  const paint = (done: { cls: string; text: string }[], partial = '') =>
     (pre.innerHTML = done.map((l) => `<span class="${l.cls}">${esc(l.text)}</span>`).join('\n') + (done.length ? '\n' : '') + (partial ? `<span class="cmd">${esc(partial)}</span>` : '') + caret);
-  if (reduced) { render(lines); return; }
+  if (reduced) { paint(lines); return; }
   const tl = gsap.timeline({ paused: true });
   const done: { cls: string; text: string }[] = [];
   for (const l of lines) {
     if (l.cls === 'cmd') {
       const o = { n: 0 };
-      tl.to(o, { n: l.text.length, duration: l.text.length * 0.022, ease: 'none', onUpdate: () => { render(done, l.text.slice(0, Math.round(o.n))); } }, '+=0.35');
+      tl.to(o, { n: l.text.length, duration: l.text.length * 0.022, ease: 'none', onUpdate: () => { paint(done, l.text.slice(0, Math.round(o.n))); } }, '+=0.35');
     }
-    tl.call(() => { done.push(l); render(done); }, [], l.cls === 'cmd' ? '+=0.25' : '+=0.07');
+    tl.call(() => { done.push(l); paint(done); }, [], l.cls === 'cmd' ? '+=0.25' : '+=0.07');
   }
-  ScrollTrigger.create({ trigger: pre, start: 'top 75%', once: true, onEnter: () => { tl.play(); } });
+  ScrollTrigger.create({ trigger: '#ch-5', start: 'top 40%', once: true, onEnter: () => { tl.play(); } });
+}
+
+function limits() {
+  const strikes = gsap.utils.toArray<HTMLElement>('.limit .no i');
+  gsap.to(strikes, { scaleX: 1, duration: 0.45, ease: SHIFT, stagger: 0.12, scrollTrigger: { trigger: '#ch-6', start: 'top 30%', toggleActions: 'play none none reverse' } });
 }
 
 // ---------------------------------------------------------------- boot
 
-let ctx: gsap.MatchMedia | null = null;
+let mm: gsap.MatchMedia | null = null;
 
 function render(keepPlace = false) {
   const y = keepPlace ? window.scrollY : 0;
-  ctx?.revert();
+  mm?.revert();
   ScrollTrigger.getAll().forEach((t) => t.kill());
   document.documentElement.lang = lang;
   const c = copy[lang];
   app.innerHTML = template(c);
-  ctx = gsap.matchMedia();
-  ctx.add({ reduced: '(prefers-reduced-motion: reduce)', full: '(prefers-reduced-motion: no-preference)' }, (m) => {
+  mm = gsap.matchMedia();
+  mm.add({ reduced: '(prefers-reduced-motion: reduce)', full: '(prefers-reduced-motion: no-preference)' }, (m) => {
     const reduced = Boolean(m.conditions?.['reduced']);
-    nav();
-    if (!reduced) heroIntro();
-    heroScroll(reduced);
-    headings();
-    if (!reduced) { reveals(); specimen(c); }
+    const f = getField();
+    rail();
+    if (reduced) {
+      gsap.set(f.crowd, { '--fade': '0.25' });
+    } else {
+      heroIntro();
+      story(f);
+      headings();
+      specimen(c);
+      limits();
+    }
     stepper(c, reduced);
     terminal(reduced);
   });
